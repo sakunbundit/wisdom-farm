@@ -295,7 +295,7 @@ const BANK_ITEMS = [{"t":"sci1_life","q":"ห่วงโซ่อาหาร�
 
 <script>
 // ===== LOGIC START (กติกาเกม ไม่แตะหน้าจอ/เวลา/สุ่มตรง ๆ — ทดสอบได้ด้วย node tests/logic.test.js) =====
-const SQ_VERSION = '0.13.0';
+const SQ_VERSION = '0.14.0';
 
 // ---------- ตัวสุ่มแบบกำหนดเมล็ดได้ (เทสต์ซ้ำได้) ----------
 function makeRng(seed) {
@@ -2123,13 +2123,13 @@ const rng = makeRng((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cur = () => S.data.profiles.find(p => p.id === S.data.current);
 
-// โหมด: 'login' = รอเข้าสู่ระบบ · 'cloud' = ล็อกอินแล้ว เซฟขึ้นเน็ต (เก็บสำเนาในเครื่องด้วย) · 'guest' = ไม่ล็อกอิน เก็บในเครื่องอย่างเดียว
+// โหมด: 'login' = รอเข้าสู่ระบบ · 'cloud' = ล็อกอินแล้ว เซฟขึ้นเน็ต (เก็บสำเนาในเครื่องด้วย กันเน็ตหลุด) · ไม่มีโหมดเล่นโดยไม่ล็อกอินแล้ว (ตั้งแต่ 0.14.0)
 S.mode = 'login';
 S.auth = { mode: 'in', email: '', busy: false, note: '' };
 const SB_URL = 'https://ljmkqvbcjcpmepydzdcz.supabase.co';
 const SB_KEY = 'sb_publishable_MpV6PeWcMICc-WlUC0BKvA_tC0oV1Fk';   // คีย์สาธารณะ ใส่ในหน้าเว็บได้ ความปลอดภัยอยู่ที่กฎของตาราง (RLS) ฝั่ง Supabase
 const AUTH_KEY = 'studyquest_auth', MODE_KEY = 'studyquest_mode';
-const CLOUD = { session: null, status: 'guest', msg: '', synced: {}, timer: 0, busy: false, again: false, lastRun: 0, pulled: false };
+const CLOUD = { session: null, status: 'sending', msg: '', synced: {}, timer: 0, busy: false, again: false, lastRun: 0, pulled: false };
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsPut = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
 const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { } };
@@ -2232,10 +2232,6 @@ function enterCloud() {
   S.view = 'profiles'; S.auth.note = ''; setCloud('sending'); render();
   cloudRun({ first: true, offerGuest: firstTime });
 }
-function enterGuest() {
-  S.mode = 'guest'; lsPut(MODE_KEY, 'guest'); setCloud('guest');
-  initData(); S.view = 'profiles'; render();
-}
 function toLogin(note) {
   clearTimeout(CLOUD.timer);
   S.mode = 'login'; S.view = 'login'; S.quiz = null; S.lesson = null; closeModal();
@@ -2244,8 +2240,8 @@ function toLogin(note) {
 }
 function setCloud(status, msg) { CLOUD.status = status; CLOUD.msg = msg || ''; paintCloud(); }
 function cloudLabel(short) {
-  const s = S.mode !== 'cloud' ? 'guest' : CLOUD.status;
-  const t = s === 'guest' ? ['💾', 'เก็บในเครื่องนี้เท่านั้น'] : s === 'ok' ? ['☁️', 'บันทึกขึ้นเน็ตแล้ว'] : s === 'sending' ? ['⏳', 'กำลังบันทึกขึ้นเน็ต…'] : ['⚠️', 'ยังส่งขึ้นเน็ตไม่ได้ (เก็บในเครื่องไว้ก่อน)'];
+  const s = CLOUD.status;
+  const t = s === 'ok' ? ['☁️', 'บันทึกขึ้นเน็ตแล้ว'] : s === 'sending' ? ['⏳', 'กำลังบันทึกขึ้นเน็ต…'] : ['⚠️', 'ยังส่งขึ้นเน็ตไม่ได้ (เก็บในเครื่องไว้ก่อน)'];
   return short ? t[0] : t[0] + ' ' + t[1];
 }
 function paintCloud() { document.querySelectorAll('.cloudchip').forEach(el => { el.textContent = cloudLabel(el.dataset.short === '1'); }); }
@@ -2269,6 +2265,7 @@ async function ensureToken() {
   return CLOUD.session.access;
 }
 function guestData() { return parseSave(lsGet(STORE_KEY)); }
+// เซฟเก่าที่เล่นแบบไม่ล็อกอิน (โหมดนี้เลิกแล้ว) ยังเสนอให้โอนขึ้นบัญชีได้ครั้งแรกที่ล็อกอิน
 // นำข้อมูลจากเน็ตมารวมกับของในเครื่อง
 function applyCloudRows(list, opt) {
   const cloud = {};
@@ -2375,8 +2372,7 @@ function viewProfiles() {
       '<button class="btn gray mini" style="margin-top:8px" data-a="rename" data-id="' + p.id + '">✏️ เปลี่ยนชื่อ</button></div>';
   });
   h += '</div><div class="acct"><span class="chip cloudchip">' + cloudLabel(false) + '</span>';
-  if (S.mode === 'cloud') h += '<span>' + esc(CLOUD.session.email) + '</span><button class="btn gray mini" data-a="alogout">ออกจากระบบ</button>';
-  else h += '<button class="btn mini" data-a="alogin">☁️ เข้าสู่ระบบ เพื่อเก็บความคืบหน้าบนเน็ต</button>';
+  h += '<span>' + esc(CLOUD.session.email) + '</span><button class="btn gray mini" data-a="alogout">ออกจากระบบ</button>';
   return h + '</div></div>';
 }
 function viewLogin() {
@@ -2391,8 +2387,7 @@ function viewLogin() {
     '<input id="a_pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)">' +
     (up ? '<input id="a_pw2" type="password" autocomplete="new-password" placeholder="พิมพ์รหัสผ่านอีกครั้ง">' : '') +
     '<div class="amsg" id="a_msg"></div>' +
-    '<button class="btn green big" id="a_go" data-a="asubmit">' + (up ? 'สมัครและเข้าเล่น' : 'เข้าสู่ระบบ') + '</button>' +
-    '<button class="btn gray mini" data-a="aguest">เล่นแบบเก็บในเครื่องนี้ (ไม่ล็อกอิน)</button></div></div>';
+    '<button class="btn green big" id="a_go" data-a="asubmit">' + (up ? 'สมัครและเข้าเล่น' : 'เข้าสู่ระบบ') + '</button></div></div>';
 }
 function viewMain() {
   const p = cur(), L = LEVELS[p.level];
@@ -2843,8 +2838,6 @@ document.addEventListener('click', e => {
   const a = el.dataset.a, id = el.dataset.id, p = S.data.current ? cur() : null, now = Date.now();
   if (a === 'amode') { S.auth.email = ($('a_email').value || '').trim(); S.auth.mode = id; render(); }
   else if (a === 'asubmit') authSubmit();
-  else if (a === 'aguest') enterGuest();
-  else if (a === 'alogin') toLogin('');
   else if (a === 'alogout') {
     const n = dirtyKeys(splitSave(S.data), CLOUD.synced).length;
     if (confirm(n ? 'ยังมีความคืบหน้าบางส่วนที่ส่งขึ้นเน็ตไม่ทัน\nถ้าออกตอนนี้ ส่วนนั้นจะค้างอยู่ในเครื่องนี้ (กลับมาเข้าบัญชีเดิมที่เครื่องนี้ จะส่งต่อให้เอง)\n\nออกจากระบบ?' : 'ออกจากระบบ?')) {
@@ -2960,8 +2953,7 @@ function boot() {
     CLOUD.session = ses; S.mode = 'cloud'; CLOUD.synced = loadSynced();
     initData(); S.view = 'profiles'; setCloud('sending'); render();
     cloudRun({ first: true });
-  } else if (mode === 'guest') enterGuest();
-  else { S.data = newData(); normalizeData(); S.view = 'login'; render(); }
+  } else { S.data = newData(); normalizeData(); S.view = 'login'; render(); }
 }
 boot();
 setInterval(tick, 1000);

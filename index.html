@@ -209,7 +209,7 @@ button.sp{background:none;border:0;padding:0;cursor:pointer}
 .content>.note,.content>.tiers{background:rgba(255,253,246,.85);border-radius:10px;padding:4px 10px}
 .content>.tiers{background:none;padding:0}
 .rv{user-select:text}
-.choice{display:flex;align-items:center;gap:8px;width:100%;flex:1 1 0;min-height:50px;max-height:118px;text-align:left;background:var(--white);border:3px solid var(--wood2);border-bottom-width:5px;border-radius:14px;padding:6px 12px;font-size:clamp(17px,2.9vmin,24px);line-height:1.4}
+.choice{display:flex;align-items:center;gap:8px;width:100%;flex:1 1 0;min-height:50px;text-align:left;background:var(--white);border:3px solid var(--wood2);border-bottom-width:5px;border-radius:14px;padding:6px 12px;font-size:clamp(17px,2.9vmin,24px);line-height:1.4}
 .choice:active{transform:translateY(2px);border-bottom-width:3px}
 .choice b{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:#f3e3c0;border:2px solid var(--wood2)}
 .choice.right{background:#e1f7e0;border-color:var(--good)}.choice.wrong{background:#ffe6df;border-color:var(--bad)}
@@ -255,6 +255,7 @@ button.sp{background:none;border:0;padding:0;cursor:pointer}
 @media (orientation:portrait),(max-width:700px){
   .qmain{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);overflow:auto}
   .qleft{overflow:visible}
+  .choice{max-height:130px}
   .farm,.parent{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
   .orders{grid-template-columns:minmax(0,1fr)}
 }
@@ -273,7 +274,7 @@ button.sp{background:none;border:0;padding:0;cursor:pointer}
 .ans{display:flex;gap:8px;align-items:center}
 .ans .box{flex:1;background:#fff;border:3px solid var(--wood2);border-radius:14px;min-height:52px;padding:6px 12px;font-size:28px;font-weight:700;letter-spacing:1px}
 .ans .unit{font-size:18px}
-.pad{flex:1;max-height:420px;display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(48px,1fr);gap:6px}
+.pad{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(48px,1fr);gap:6px}
 .pad button{background:var(--white);border:3px solid var(--wood2);border-bottom-width:5px;border-radius:14px;font-size:clamp(20px,3.4vmin,28px);font-weight:700}
 .pad button:active{transform:translateY(2px);border-bottom-width:3px}
 .pad .go{grid-column:span 2;background:linear-gradient(#7fdc6a,#3fb24a);color:#fff;border-color:#2a8a35}
@@ -310,7 +311,7 @@ const SPELL = [{"t":"sp1_sor","ok":"ศาลา","bad":["สาลา","ษา�
 
 <script>
 // ===== LOGIC START (กติกาเกม ไม่แตะหน้าจอ/เวลา/สุ่มตรง ๆ — ทดสอบได้ด้วย node tests/logic.test.js) =====
-const SQ_VERSION = '0.20.0';
+const SQ_VERSION = '0.20.1';
 
 // ---------- ตัวสุ่มแบบกำหนดเมล็ดได้ (เทสต์ซ้ำได้) ----------
 function makeRng(seed) {
@@ -2231,8 +2232,8 @@ function unifyPlayers(d) {
     if (!LEVELS[d.level] && was && LEVELS[was.level]) d.level = was.level;
     d.profiles = [mergeProfiles(ps)];
   }
-  if (!LEVELS[d.level]) delete d.level;
-  d.profiles[0].level = d.level || 'm1';
+  if (!LEVELS[d.level]) d.level = 'm1';          // ไม่รู้ว่าเล่นชั้นไหนล่าสุด → เริ่มที่ ม.1 (สลับได้ที่แถบบน)
+  d.profiles[0].level = d.level;
   d.current = PLAYER_ID; d.v = 2;
   return d;
 }
@@ -2310,7 +2311,7 @@ function mergeRows(localParts, synced, cloudRows) {
 <script>
 // ===================== หน้าจอ =====================
 const STORE_KEY = 'studyquest_v1';
-const S = { data: null, lesson: null, view: 'profiles', tab: 'farm', subject: 'math', tier: 'core', parentSubject: 'math', reviewSubject: 'sci', reviewTodo: true, quiz: null, lsub: 'all', storageOk: true, audio: null, sig: '', toastTimer: 0 };
+const S = { data: null, lesson: null, view: 'login', tab: 'farm', subject: 'math', tier: 'core', parentSubject: 'math', reviewSubject: 'sci', reviewTodo: true, quiz: null, lsub: 'all', storageOk: true, audio: null, sig: '', toastTimer: 0 };
 const $ = id => document.getElementById(id);
 const rng = makeRng((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2343,8 +2344,8 @@ function normalizeData() {
   migrateBankIds(S.data);
   S.data.profiles.forEach(p => { ensureFarmExtras(p); ensureOrders(p, rng); });
 }
-// เข้าเกมแล้วไปไหนก่อน: เคยเลือกชั้นไว้แล้ว → เข้าฟาร์มเลย · ยังไม่เคย → ถามชั้นครั้งเดียว
-function startView() { S.view = S.data.level ? 'main' : 'profiles'; S.tab = 'farm'; }
+// เข้าเกมแล้วเข้าฟาร์มเลย ไม่มีหน้าเลือกชั้น (ชั้นเริ่มต้น ม.1 สลับได้ด้วยปุ่มที่แถบบน)
+function startView() { S.view = 'main'; S.tab = 'farm'; }
 function parseSave(t) {
   try { const d = JSON.parse(t); if (d && Array.isArray(d.profiles)) return d; } catch (e) { }
   return null;
@@ -2484,8 +2485,7 @@ function applyCloudRows(list, opt) {
   mr.taken.forEach(k => { CLOUD.synced[k] = h[k]; });
   up.migrated.forEach(k => { delete CLOUD.synced[k]; });   // แถวที่เพิ่งรวมขึ้นใหม่ ยังไม่อยู่บนเน็ต ต้องส่งขึ้นไป
   saveSynced(); writeLocal();
-  if (S.view === 'profiles' && S.data.level) S.view = 'main';
-  if (opt.first || S.view === 'profiles') render();
+  if (opt.first) render();
 }
 async function cloudPush(tok) {
   const parts = splitSave(S.data), keys = dirtyKeys(parts, CLOUD.synced);
@@ -2555,23 +2555,9 @@ function render() {
   const app = $('app');
   let html = '';
   if (!S.storageOk) html += '<div class="banner">⚠️ เบราว์เซอร์นี้บันทึกข้อมูลไม่ได้ (อาจเปิดโหมดส่วนตัวอยู่) ถ้าปิดหน้านี้ความคืบหน้าจะหาย</div>';
-  html += S.view === 'login' ? viewLogin() : S.view === 'profiles' ? viewProfiles() : S.view === 'review' ? viewReview() : viewMain();
+  html += S.view === 'login' ? viewLogin() : S.view === 'review' ? viewReview() : viewMain();
   app.innerHTML = html;
   S.sig = farmSig();
-}
-function viewProfiles() {
-  let h = '<div class="center"><h1 style="text-align:center">LevelUp <small style="font-size:13px;font-weight:400">v' + SQ_VERSION + '</small></h1>' +
-    '<p style="text-align:center;margin:4px 0">วันนี้เตรียมสอบชั้นไหน? ตอบคำถามเพื่อปลูกผักในฟาร์ม (สลับชั้นได้ทุกเมื่อ ฟาร์มใช้ร่วมกัน)</p><div class="cards">';
-  const p0 = S.data.profiles[0];
-  LEVEL_IDS.forEach(id => {
-    const L = LEVELS[id];
-    h += '<div class="card"><div class="av">' + L.icon + '</div><h2>' + L.label + '</h2>' +
-      '<div style="margin:8px 0">🪙 ' + p0.coins + ' &nbsp; 🌱 ' + p0.seeds + '</div>' +
-      '<button class="btn green big" data-a="setlevel" data-id="' + id + '">▶ เล่น</button></div>';
-  });
-  h += '</div><div class="acct"><span class="chip cloudchip">' + cloudLabel(false) + '</span>';
-  h += '<span>' + esc(CLOUD.session.email) + '</span><button class="btn gray mini" data-a="alogout">ออกจากระบบ</button>';
-  return h + '</div></div>';
 }
 function viewLogin() {
   const A = S.auth, up = A.mode === 'up';
@@ -2994,18 +2980,19 @@ function renderQuiz() {
   const q = Q.qs[Q.i];
   const draft = q.itemId && !S.data.ok[q.itemId] ? '<span class="draft">ร่างโดย AI · รอผู้ปกครองตรวจ</span>' : '';
   const last = Q.i + 1 >= Q.qs.length;
+  const isMc = q.kind === 'mc';
   const body = q.prompt + (q.hint ? '<div class="hint">' + q.hint + '</div>' : '');
   const sub = SUBJECTS[GEN_BY_ID[q.gen].subject];
+  // ข้อความ "เลือกคำตอบ" และป้ายร่างโดย AI อยู่ในการ์ดโจทย์ฝั่งซ้าย เพื่อให้ฝั่งขวาเริ่มที่ระดับเดียวกับการ์ด
   const qbox = Q.phase === 'ask'
-    ? '<div class="qbox big"><div class="qhead"><span class="qno">ข้อ ' + (Q.i + 1) + ' / ' + Q.qs.length + '</span><span>' + sub.icon + ' ' + sub.name + '</span></div>' +
-      '<div class="qbody">' + body + '</div><span class="qmark" aria-hidden="true">' + sub.icon + '</span></div>'
+    ? '<div class="qbox big"><div class="qhead"><span class="qno">ข้อ ' + (Q.i + 1) + ' / ' + Q.qs.length + '</span><span>' + (isMc ? draft : '') + sub.icon + ' ' + sub.name + '</span></div>' +
+      '<div class="qbody">' + body + (isMc ? '<div class="note" style="margin-top:10px">👉 เลือกคำตอบที่ถูกที่สุด</div>' : '') + '</div><span class="qmark" aria-hidden="true">' + sub.icon + '</span></div>'
     : '<div class="qbox">' + body + '</div>';
   const fbHtml = ok => '<div class="fb ' + (ok ? 'ok' : 'no') + '"><div class="big">' + (ok ? '✅ ถูกต้อง!' : '❌ ยังไม่ถูก') + draft + '</div>' +
     '<div>คำตอบที่ถูก: <b>' + esc(q.ansText) + '</b> ' + (q.unit || '') + '</div><div style="margin-top:4px">💡 ' + q.explain + '</div></div>';
   let left = qbox, right = '', bar = '';
   if (q.kind === 'mc' && Q.phase === 'ask') {
-    right = '<div class="note" style="flex:none">เลือกคำตอบที่ถูกที่สุด ' + draft + '</div>' +
-      q.choices.map((c, i) => '<button class="choice" data-a="choice" data-id="' + i + '"><b>' + CHOICE_LABELS[i] + '.</b> <span>' + esc(c) + '</span></button>').join('');
+    right = q.choices.map((c, i) => '<button class="choice" data-a="choice" data-id="' + i + '"><b>' + CHOICE_LABELS[i] + '.</b> <span>' + esc(c) + '</span></button>').join('');
   } else if (q.kind === 'mc') {
     const ok = Q.results[Q.i], picked = Q.picked;
     left += fbHtml(ok);
@@ -3078,7 +3065,6 @@ document.addEventListener('click', e => {
     if (pl.level === id && S.data.level === id && S.view === 'main') return;
     S.data.current = pl.id; S.data.level = id; pl.level = id;
     S.lesson = null; S.tier = 'core'; S.lsub = 'all';
-    if (S.view === 'profiles') { S.view = 'main'; S.tab = 'farm'; }
     save(); render();
   }
   else if (a === 'rename') {

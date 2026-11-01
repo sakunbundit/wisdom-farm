@@ -310,7 +310,7 @@ const SPELL = [{"t":"sp1_sor","ok":"ศาลา","bad":["สาลา","ษา�
 
 <script>
 // ===== LOGIC START (กติกาเกม ไม่แตะหน้าจอ/เวลา/สุ่มตรง ๆ — ทดสอบได้ด้วย node tests/logic.test.js) =====
-const SQ_VERSION = '0.19.0';
+const SQ_VERSION = '0.20.0';
 
 // ---------- ตัวสุ่มแบบกำหนดเมล็ดได้ (เทสต์ซ้ำได้) ----------
 function makeRng(seed) {
@@ -1421,7 +1421,7 @@ function addReview(p, genId, now) {
   if (e) { e.step = 0; e.due = now + REVIEW_STEPS_MS[0]; }
   else p.review.push({ gen: genId, step: 0, due: now + REVIEW_STEPS_MS[0] });
 }
-function dueReviews(p, now) { return p.review.filter(x => x.due <= now); }
+function dueReviews(p, now) { return p.review.filter(x => x.due <= now && (!GEN_BY_ID[x.gen] || GEN_BY_ID[x.gen].level === p.level)); }   // เฉพาะวัชพืชของชั้นที่กำลังเล่น
 function recordAnswer(p, q, correct, now) {
   const st = p.stats[q.gen] || (p.stats[q.gen] = { r: 0, w: 0 });
   if (correct) st.r += 1; else st.w += 1;
@@ -2189,20 +2189,106 @@ function finishLesson(p, id) {
   if (first) p.seeds += LESSON_BONUS_SEEDS;
   return { ok: true, seeds: first ? LESSON_BONUS_SEEDS : 0, first };
 }
-// ---------- เซฟออนไลน์: แบ่งข้อมูลเป็นแถว (shared = ผลตรวจเฉลย · p:<id> = โปรไฟล์ละแถว) ----------
+// ---------- ผู้เล่นคนเดียว (v0.20.0): ฟาร์มเดียวใช้ร่วม ม.1 และ ม.4 ----------
+// สถิติ/วัชพืช/บทเรียนแยกตามชั้นอยู่แล้ว (รหัสหัวข้อของ ม.1 กับ ม.4 เป็นคนละชุด) ส่วนฟาร์ม เหรียญ เมล็ด สัตว์ ใช้ร่วมกัน
+const PLAYER_ID = 'me';
+const LV_FIELDS = ['stats', 'review', 'lessons'];   // ฟิลด์ที่แยกเก็บตามชั้น
+// รวมโปรไฟล์หลายอันเป็นอันเดียว: เหรียญ/เมล็ด/ของในโกดัง/ยอดตอบ บวกกัน · แปลงดินเอาจำนวนมากสุด · สัตว์รวมกัน · ฟาร์มหลักยึดอันที่เล่นมากกว่า
+function mergeProfiles(list) {
+  const arr = (list || []).filter(Boolean).slice().sort((a, b) => (b.answered || 0) - (a.answered || 0));
+  const out = JSON.parse(JSON.stringify(arr[0]));
+  out.id = PLAYER_ID;
+  if (/^น้อง ม\.[14]$/.test(out.name || '')) out.name = 'ผู้เล่น';
+  out.stats = out.stats || {}; out.review = out.review || []; out.lessons = out.lessons || {};
+  out.barn = out.barn || {}; out.animals = out.animals || {}; out.plots = out.plots || [];
+  arr.slice(1).forEach(o => {
+    out.coins = (out.coins || 0) + (o.coins || 0);
+    out.seeds = (out.seeds || 0) + (o.seeds || 0);
+    out.answered = (out.answered || 0) + (o.answered || 0);
+    Object.keys(o.barn || {}).forEach(k => { out.barn[k] = (out.barn[k] || 0) + (o.barn[k] || 0); });
+    out.plotCount = Math.max(out.plotCount || 0, o.plotCount || 0);
+    while (out.plots.length < out.plotCount) out.plots.push(null);
+    (o.plots || []).forEach((s, i) => { if (s && !out.plots[i]) out.plots[i] = JSON.parse(JSON.stringify(s)); });
+    Object.keys(o.animals || {}).forEach(k => { if (!out.animals[k]) out.animals[k] = JSON.parse(JSON.stringify(o.animals[k])); });
+    Object.keys(o.stats || {}).forEach(g => {
+      if (out.stats[g]) { out.stats[g].r += o.stats[g].r; out.stats[g].w += o.stats[g].w; } else out.stats[g] = JSON.parse(JSON.stringify(o.stats[g]));
+    });
+    (o.review || []).forEach(e => { if (!out.review.some(x => x.gen === e.gen)) out.review.push(JSON.parse(JSON.stringify(e))); });
+    Object.keys(o.lessons || {}).forEach(l => {
+      if (out.lessons[l]) out.lessons[l].n += o.lessons[l].n; else out.lessons[l] = JSON.parse(JSON.stringify(o.lessons[l]));
+    });
+  });
+  return out;
+}
+// ข้อมูลเกมที่ยังมีโปรไฟล์หลายอัน (เซฟรุ่นก่อน 0.20.0) ต้องรวมเป็นอันเดียวไหม
+function needsUnify(d) { const ps = d.profiles || []; return ps.length > 1 || (ps.length === 1 && ps[0].id !== PLAYER_ID); }
+// ทำให้มีผู้เล่นคนเดียวเสมอ · ชั้นที่เล่นล่าสุด (d.level) เก็บในเครื่อง ไม่ขึ้นเน็ต เพราะสองเครื่องอาจเล่นคนละชั้น
+function unifyPlayers(d) {
+  const ps = d.profiles || [];
+  if (!ps.length) d.profiles = [newProfile(PLAYER_ID, 'ผู้เล่น', 'm1')];
+  else if (needsUnify(d)) {
+    const was = ps.find(p => p.id === d.current);
+    if (!LEVELS[d.level] && was && LEVELS[was.level]) d.level = was.level;
+    d.profiles = [mergeProfiles(ps)];
+  }
+  if (!LEVELS[d.level]) delete d.level;
+  d.profiles[0].level = d.level || 'm1';
+  d.current = PLAYER_ID; d.v = 2;
+  return d;
+}
+// ---------- เซฟออนไลน์: แบ่งข้อมูลเป็นแถว ----------
+// shared = ผลตรวจเฉลย · p:me = ฟาร์ม/เหรียญ/เมล็ด (ใช้ร่วมสองชั้น) · lv:me:m1 / lv:me:m4 = สถิติ วัชพืช บทเรียนของแต่ละชั้น (แยกแถว สองเครื่องเล่นคนละชั้นไม่ทับกัน)
 const CLOUD_SHARED_KEY = 'shared';
+const LEVEL_IDS = Object.keys(LEVELS);
+const genLevel = id => GEN_BY_ID[id] ? GEN_BY_ID[id].level : null;
+const lessonLevel = id => LESSON_BY_ID[id] ? LESSON_BY_ID[id].level : null;
 function splitSave(d) {
   const parts = {};
   parts[CLOUD_SHARED_KEY] = { ok: d.ok || {}, bad: d.bad || {}, lok: d.lok || {} };
-  (d.profiles || []).forEach(p => { parts['p:' + p.id] = p; });
+  (d.profiles || []).forEach(p => {
+    const farm = {};
+    Object.keys(p).forEach(k => { if (LV_FIELDS.indexOf(k) < 0 && k !== 'level') farm[k] = p[k]; });   // level อยู่ในเครื่อง ไม่ขึ้นเน็ต
+    parts['p:' + p.id] = farm;
+    LEVEL_IDS.forEach(lv => {
+      const row = { stats: {}, review: [], lessons: {} };
+      Object.keys(p.stats || {}).forEach(g => { if (genLevel(g) === lv) row.stats[g] = p.stats[g]; });
+      (p.review || []).forEach(e => { if (genLevel(e.gen) === lv) row.review.push(e); });
+      Object.keys(p.lessons || {}).forEach(l => { if (lessonLevel(l) === lv) row.lessons[l] = p.lessons[l]; });
+      parts['lv:' + p.id + ':' + lv] = row;
+    });
+  });
   return parts;
 }
-// ประกอบกลับเป็นข้อมูลเกม · local = ค่าที่ไม่ขึ้นเน็ต (ใครกำลังเล่น เสียงเปิด/ปิด)
+// แถวจากเน็ตรุ่นก่อน 0.20.0 (p:a, p:b แยกสองคน) → รวมเป็น p:me + lv:me:* · migrated=true แปลว่าต้องส่งแถวใหม่ขึ้นเน็ต (แถวเก่าไม่ลบ เก็บไว้เป็นสำรอง)
+function upgradeRows(cloud) {
+  if (cloud['p:' + PLAYER_ID]) return { rows: cloud, migrated: [] };
+  const old = Object.keys(cloud).filter(k => k.indexOf('p:') === 0).sort();
+  if (!old.length) return { rows: cloud, migrated: [] };
+  const merged = unifyPlayers({ profiles: old.map(k => cloud[k]), current: null });
+  const parts = splitSave({ profiles: merged.profiles }), rows = {};
+  Object.keys(cloud).forEach(k => { if (old.indexOf(k) < 0) rows[k] = cloud[k]; });
+  const migrated = Object.keys(parts).filter(k => k !== CLOUD_SHARED_KEY);
+  migrated.forEach(k => { rows[k] = parts[k]; });
+  return { rows, migrated };
+}
+// ประกอบกลับเป็นข้อมูลเกม · local = ค่าที่ไม่ขึ้นเน็ต (ชั้นที่เล่น เสียงเปิด/ปิด)
 function joinSave(rows, local) {
-  const profiles = Object.keys(rows).filter(k => k.indexOf('p:') === 0).sort().map(k => rows[k]);
-  const sh = rows[CLOUD_SHARED_KEY] || {};
-  const cur = local && profiles.some(p => p.id === local.current) ? local.current : null;
-  return { v: 1, current: cur, sound: !local || local.sound !== false, profiles, ok: sh.ok || {}, bad: sh.bad || {}, lok: sh.lok || {} };
+  const sh = rows[CLOUD_SHARED_KEY] || {}, profiles = [], farm = rows['p:' + PLAYER_ID];
+  if (farm) {
+    const p = Object.assign({}, farm);
+    p.stats = {}; p.review = []; p.lessons = {};
+    LEVEL_IDS.forEach(lv => {
+      const r = rows['lv:' + p.id + ':' + lv];
+      if (!r) return;
+      Object.assign(p.stats, r.stats || {}); (r.review || []).forEach(e => p.review.push(e)); Object.assign(p.lessons, r.lessons || {});
+    });
+    profiles.push(p);
+  }
+  const level = local && LEVELS[local.level] ? local.level : undefined;
+  profiles.forEach(p => { p.level = level || 'm1'; });
+  const d = { v: 2, current: profiles.length ? PLAYER_ID : null, sound: !local || local.sound !== false, profiles, ok: sh.ok || {}, bad: sh.bad || {}, lok: sh.lok || {} };
+  if (level) d.level = level;
+  return d;
 }
 function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36) + ':' + s.length; }
 function partHashes(parts) { const o = {}; Object.keys(parts).forEach(k => { o[k] = hashStr(JSON.stringify(parts[k])); }); return o; }
@@ -2244,16 +2330,21 @@ const cacheKey = () => S.mode === 'cloud' && CLOUD.session ? STORE_KEY + '_u_' +
 const syncKey = () => 'studyquest_sync_' + CLOUD.session.uid;
 
 function newData() {
-  return { v: 1, current: null, sound: true,
-    profiles: [newProfile('a', 'น้อง ม.1', 'm1'), newProfile('b', 'น้อง ม.4', 'm4')] };
+  return { v: 2, current: PLAYER_ID, sound: true, profiles: [newProfile(PLAYER_ID, 'ผู้เล่น', 'm1')] };
 }
 function normalizeData() {
   S.data.ok = S.data.ok || {};     // ข้อสอบที่ผู้ปกครองตรวจแล้วว่าถูก
   S.data.bad = S.data.bad || {};   // ข้อสอบที่ถูกซ่อน (เฉลยผิด/กำกวม)
   S.data.lok = S.data.lok || {};   // บทเรียนที่ผู้ปกครองตรวจแล้ว
+  if (needsUnify(S.data)) {        // เซฟรุ่นก่อน 0.20.0 มี 2 โปรไฟล์ → สำรองไว้ในเครื่องก่อนรวมเป็นคนเดียว
+    lsPut('studyquest_backup_pre020_' + (CLOUD.session ? CLOUD.session.uid : 'guest'), JSON.stringify(S.data));
+  }
+  unifyPlayers(S.data);
   migrateBankIds(S.data);
   S.data.profiles.forEach(p => { ensureFarmExtras(p); ensureOrders(p, rng); });
 }
+// เข้าเกมแล้วไปไหนก่อน: เคยเลือกชั้นไว้แล้ว → เข้าฟาร์มเลย · ยังไม่เคย → ถามชั้นครั้งเดียว
+function startView() { S.view = S.data.level ? 'main' : 'profiles'; S.tab = 'farm'; }
 function parseSave(t) {
   try { const d = JSON.parse(t); if (d && Array.isArray(d.profiles)) return d; } catch (e) { }
   return null;
@@ -2337,7 +2428,7 @@ function enterCloud() {
   CLOUD.synced = loadSynced(); CLOUD.pulled = false;
   const firstTime = !lsGet(cacheKey());
   initData();
-  S.view = 'profiles'; S.auth.note = ''; setCloud('sending'); render();
+  startView(); S.auth.note = ''; setCloud('sending'); render();
   cloudRun({ first: true, offerGuest: firstTime });
 }
 function toLogin(note) {
@@ -2384,17 +2475,16 @@ function applyCloudRows(list, opt) {
       S.data = g; normalizeData(); writeLocal(); render(); return;
     }
   }
-  if (!opt.first) {                                   // ระหว่างเล่น: ไม่แตะคนที่กำลังเล่น และไม่ยุ่งตอนทำโจทย์
-    if (S.quiz || S.lesson) return;
-    if (S.data.current) delete cloud['p:' + S.data.current];
-  }
-  const mr = mergeRows(splitSave(S.data), CLOUD.synced, cloud);
-  S.data = joinSave(mr.rows, { current: S.data.current, sound: S.data.sound });
+  if (!opt.first && (S.quiz || S.lesson)) return;     // ระหว่างเล่น: ไม่ยุ่งตอนทำโจทย์/อ่านบทเรียน (แถวที่เครื่องแก้ไว้ยังไม่ส่ง mergeRows เก็บของเครื่องให้อยู่แล้ว)
+  const up = upgradeRows(cloud);                       // เซฟรุ่นเก่า 2 โปรไฟล์บนเน็ต → รวมเป็นคนเดียว
+  const mr = mergeRows(splitSave(S.data), CLOUD.synced, up.rows);
+  S.data = joinSave(mr.rows, { level: S.data.level, sound: S.data.sound });
   normalizeData();
   const h = partHashes(splitSave(S.data));
   mr.taken.forEach(k => { CLOUD.synced[k] = h[k]; });
+  up.migrated.forEach(k => { delete CLOUD.synced[k]; });   // แถวที่เพิ่งรวมขึ้นใหม่ ยังไม่อยู่บนเน็ต ต้องส่งขึ้นไป
   saveSynced(); writeLocal();
-  if (S.view === 'main' && !cur()) S.view = 'profiles';
+  if (S.view === 'profiles' && S.data.level) S.view = 'main';
   if (opt.first || S.view === 'profiles') render();
 }
 async function cloudPush(tok) {
@@ -2471,13 +2561,13 @@ function render() {
 }
 function viewProfiles() {
   let h = '<div class="center"><h1 style="text-align:center">LevelUp <small style="font-size:13px;font-weight:400">v' + SQ_VERSION + '</small></h1>' +
-    '<p style="text-align:center;margin:4px 0">เลือกว่าใครเล่น แล้วตอบคำถามเพื่อปลูกผักในฟาร์ม</p><div class="cards">';
-  S.data.profiles.forEach(p => {
-    const L = LEVELS[p.level];
-    h += '<div class="card"><div class="av">' + L.icon + '</div><h2>' + esc(p.name) + '</h2><div>' + L.label + '</div>' +
-      '<div style="margin:8px 0">🪙 ' + p.coins + ' &nbsp; 🌱 ' + p.seeds + '</div>' +
-      '<button class="btn green big" data-a="pick" data-id="' + p.id + '">▶ เล่น</button>' +
-      '<button class="btn gray mini" style="margin-top:8px" data-a="rename" data-id="' + p.id + '">✏️ เปลี่ยนชื่อ</button></div>';
+    '<p style="text-align:center;margin:4px 0">วันนี้เตรียมสอบชั้นไหน? ตอบคำถามเพื่อปลูกผักในฟาร์ม (สลับชั้นได้ทุกเมื่อ ฟาร์มใช้ร่วมกัน)</p><div class="cards">';
+  const p0 = S.data.profiles[0];
+  LEVEL_IDS.forEach(id => {
+    const L = LEVELS[id];
+    h += '<div class="card"><div class="av">' + L.icon + '</div><h2>' + L.label + '</h2>' +
+      '<div style="margin:8px 0">🪙 ' + p0.coins + ' &nbsp; 🌱 ' + p0.seeds + '</div>' +
+      '<button class="btn green big" data-a="setlevel" data-id="' + id + '">▶ เล่น</button></div>';
   });
   h += '</div><div class="acct"><span class="chip cloudchip">' + cloudLabel(false) + '</span>';
   h += '<span>' + esc(CLOUD.session.email) + '</span><button class="btn gray mini" data-a="alogout">ออกจากระบบ</button>';
@@ -2500,10 +2590,10 @@ function viewLogin() {
 function viewMain() {
   const p = cur(), L = LEVELS[p.level];
   let h = '<div class="top"><div class="title">LevelUp <span class="ver">v' + SQ_VERSION + '</span></div><div class="chips">' +
-    '<span class="chip">' + L.icon + ' ' + esc(p.name) + '</span><span class="chip">🪙 ' + p.coins + '</span><span class="chip">🌱 ' + p.seeds + '</span>' +
+    LEVEL_IDS.map(id => '<button class="btn mini ' + (p.level === id ? 'green' : 'gray') + '" data-a="setlevel" data-id="' + id + '" aria-pressed="' + (p.level === id) + '">' + LEVELS[id].icon + ' ' + (id === 'm1' ? 'ม.1' : 'ม.4') + '</button>').join('') +
+    '<span class="chip">🪙 ' + p.coins + '</span><span class="chip">🌱 ' + p.seeds + '</span>' +
     '<span class="chip cloudchip" data-short="1" data-a="cloudinfo">' + cloudLabel(true) + '</span>' +
-    '<button class="btn gray mini" data-a="sound">' + (S.data.sound ? '🔊' : '🔇') + '</button>' +
-    '<button class="btn gray mini" data-a="switch">👥 เปลี่ยนคน</button></div></div>';
+    '<button class="btn gray mini" data-a="sound">' + (S.data.sound ? '🔊' : '🔇') + '</button></div></div>';
   const tabs = [['farm', '🌱 ฟาร์ม'], ['orders', '📦 ออเดอร์'], ['learn', '📖 เรียน'], ['play', '📝 ตอบคำถาม'], ['parent', '👨‍👩‍👧 ผู้ปกครอง']];
   h += '<div class="tabs">' + tabs.map(t => '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-id="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
   h += '<div class="content">' + (S.tab === 'farm' ? tabFarm(p) : S.tab === 'orders' ? tabOrders(p) : S.tab === 'learn' ? tabLearn(p) : S.tab === 'play' ? tabPlay(p) : tabParent(p)) + '</div>';
@@ -2785,7 +2875,9 @@ function tabParent(p) {
       '<option value="' + v + '"' + (Math.abs(p.stretch - v) < 0.001 ? ' selected' : '') + '>' + Math.round(v * 100) + '%</option>').join('') + '</select></div>' +
     '<div class="note">แนะนำ: เดือนแรก 10-20% แล้วเพิ่มเป็น 30% ขึ้นไปในเดือนที่ 2-3</div>' +
     '<div class="row"><button class="btn gray" data-a="rename" data-id="' + p.id + '">✏️ เปลี่ยนชื่อ</button>' +
-    '<button class="btn red" data-a="reset">🗑 ล้างข้อมูล</button></div></div></div></div>';
+    '<button class="btn red" data-a="reset">🗑 ล้างข้อมูล</button></div>' +
+    '<div class="row"><span class="chip cloudchip">' + cloudLabel(false) + '</span><small>' + esc(CLOUD.session ? CLOUD.session.email : '') + '</small>' +
+    '<button class="btn gray mini" data-a="alogout">ออกจากระบบ</button></div></div></div></div>';
   return h;
 }
 // ---------- ตรวจเฉลย (ผู้ปกครอง) ----------
@@ -2979,8 +3071,16 @@ document.addEventListener('click', e => {
     }
   }
   else if (a === 'cloudinfo') toast(cloudLabel(false) + (CLOUD.msg && CLOUD.status === 'offline' ? ' · ' + CLOUD.msg : ''));
-  else if (a === 'pick') { S.data.current = id; S.view = 'main'; S.tab = 'farm'; save(); render(); }
-  else if (a === 'switch') { S.view = 'profiles'; render(); }
+  else if (a === 'setlevel') {
+    if (!LEVELS[id]) return;
+    if (S.quiz) { toast('จบหรือออกจากด่านที่เล่นอยู่ก่อน แล้วค่อยสลับชั้นนะ'); return; }
+    const pl = S.data.profiles[0];
+    if (pl.level === id && S.data.level === id && S.view === 'main') return;
+    S.data.current = pl.id; S.data.level = id; pl.level = id;
+    S.lesson = null; S.tier = 'core'; S.lsub = 'all';
+    if (S.view === 'profiles') { S.view = 'main'; S.tab = 'farm'; }
+    save(); render();
+  }
   else if (a === 'rename') {
     const pr = S.data.profiles.find(x => x.id === id);
     const n = prompt('ชื่อใหม่', pr.name);
@@ -3050,7 +3150,7 @@ document.addEventListener('click', e => {
   else if (a === 'qagain') { const o = S.quiz.opts, r = S.quiz.review; startQuiz(o, r); }
   else if (a === 'qexit') exitQuiz();
   else if (a === 'reset') {
-    if (confirm('ล้างข้อมูลของ "' + p.name + '" ทั้งหมด (เหรียญ เมล็ด ฟาร์ม สถิติ)? กู้คืนไม่ได้')) {
+    if (confirm('ล้างข้อมูลทั้งหมด (เหรียญ เมล็ด ฟาร์ม สถิติของทั้ง ม.1 และ ม.4)? กู้คืนไม่ได้')) {
       const np = newProfile(p.id, p.name, p.level); ensureOrders(np, rng);
       S.data.profiles[S.data.profiles.indexOf(p)] = np; save(); render();
     }
@@ -3094,7 +3194,7 @@ function boot() {
   const ses = loadSession(), mode = lsGet(MODE_KEY);
   if (ses && mode === 'cloud') {
     CLOUD.session = ses; S.mode = 'cloud'; CLOUD.synced = loadSynced();
-    initData(); S.view = 'profiles'; setCloud('sending'); render();
+    initData(); startView(); setCloud('sending'); render();
     cloudRun({ first: true });
   } else { S.data = newData(); normalizeData(); S.view = 'login'; render(); }
 }

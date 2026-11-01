@@ -223,6 +223,30 @@ button.sp{background:none;border:0;padding:0;cursor:pointer}
 .parent .detail{flex:1;min-height:0;overflow:auto}
 .parent .side{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
 .parent .btn{min-height:42px;font-size:15px}
+.parent .btn.mini{min-height:36px;font-size:14px}
+.parent .side .panel{flex:none}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;flex:none}
+.kpi{background:rgba(255,253,246,.92);border:3px solid var(--wood2);border-radius:var(--r);padding:6px 10px;display:flex;flex-direction:column;gap:1px;text-align:left;font:inherit;min-width:0}
+.kpi b{font-size:clamp(17px,2.6vmin,22px);line-height:1.25}
+.kpi small{font-size:12px;color:var(--ink2);line-height:1.3}
+button.kpi:active{transform:translateY(2px)}
+.chart{flex:none;padding:6px 10px}
+.chart svg{width:100%;height:clamp(64px,11vh,96px);display:block}
+.ctitle{font-weight:700;font-size:14px}
+.ctitle small{font-weight:400;color:var(--ink2);font-size:12px}
+.lvbar{flex:none;margin:0}
+.lvbar small{color:var(--ink2)}
+.up{color:var(--good);font-weight:800}
+.dn{color:var(--bad);font-weight:800}
+.miss{display:flex;flex-direction:column;gap:2px;border-top:1px dashed var(--wood2);padding:4px 0;font-size:14px}
+.miss small{color:var(--ink2)}
+.pingate{margin:10px auto 0;align-self:center;text-align:center;max-width:340px;width:100%}
+.pindots{display:flex;gap:12px;justify-content:center;margin:10px 0}
+.pindots i{width:18px;height:18px;border-radius:50%;border:3px solid var(--wood2);background:#fff}
+.pindots i.on{background:var(--gold)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:8px;justify-content:center;margin-bottom:8px}
+.pinpad button{height:56px;background:var(--white);border:3px solid var(--wood2);border-bottom-width:5px;border-radius:14px;font-size:24px;font-weight:700}
+.pinpad button:active{transform:translateY(2px);border-bottom-width:3px}
 .bar{flex:1;min-width:80px;height:12px;background:#e6dcc5;border-radius:999px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--good)}
 .bar i.low{background:var(--bad)}.bar i.mid{background:var(--gold)}
@@ -256,6 +280,11 @@ button.sp{background:none;border:0;padding:0;cursor:pointer}
   .qmain{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);overflow:auto}
   .qleft{overflow:visible}
   .choice{max-height:130px}
+  .parent{display:block;overflow:auto}
+  .parent .main,.parent .side{min-height:auto;overflow:visible}
+  .parent .side{margin-top:8px}
+  .parent .detail{flex:none;overflow:visible}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .farm,.parent{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
   .orders{grid-template-columns:minmax(0,1fr)}
 }
@@ -311,7 +340,7 @@ const SPELL = [{"t":"sp1_sor","ok":"ศาลา","bad":["สาลา","ษา�
 
 <script>
 // ===== LOGIC START (กติกาเกม ไม่แตะหน้าจอ/เวลา/สุ่มตรง ๆ — ทดสอบได้ด้วย node tests/logic.test.js) =====
-const SQ_VERSION = '0.20.1';
+const SQ_VERSION = '0.21.0';
 
 // ---------- ตัวสุ่มแบบกำหนดเมล็ดได้ (เทสต์ซ้ำได้) ----------
 function makeRng(seed) {
@@ -1288,6 +1317,8 @@ function ensureFarmExtras(p) {
   Object.keys(ITEMS).forEach(c => { if (typeof p.barn[c] !== 'number') p.barn[c] = 0; });
   if (!p.animals) p.animals = { hen: { at: null } };
   if (!p.lessons) p.lessons = {};
+  if (!p.days) p.days = {};    // สถิติรายวันแยกตามชั้น (v0.21.0) days[ชั้น][เลขวัน][วิชา] = [ตอบ, ถูก, วินาที]
+  if (!p.miss) p.miss = {};    // ข้อเลือกตอบที่ผิดซ้ำ miss[ชั้น][รหัสข้อ] = จำนวนครั้ง
 }
 
 // ---------- ฟาร์ม ----------
@@ -2193,7 +2224,7 @@ function finishLesson(p, id) {
 // ---------- ผู้เล่นคนเดียว (v0.20.0): ฟาร์มเดียวใช้ร่วม ม.1 และ ม.4 ----------
 // สถิติ/วัชพืช/บทเรียนแยกตามชั้นอยู่แล้ว (รหัสหัวข้อของ ม.1 กับ ม.4 เป็นคนละชุด) ส่วนฟาร์ม เหรียญ เมล็ด สัตว์ ใช้ร่วมกัน
 const PLAYER_ID = 'me';
-const LV_FIELDS = ['stats', 'review', 'lessons'];   // ฟิลด์ที่แยกเก็บตามชั้น
+const LV_FIELDS = ['stats', 'review', 'lessons', 'days', 'miss'];   // ฟิลด์ที่แยกเก็บตามชั้น (days/miss เก็บในหน่วยความจำเป็น {ชั้น: ...})
 // รวมโปรไฟล์หลายอันเป็นอันเดียว: เหรียญ/เมล็ด/ของในโกดัง/ยอดตอบ บวกกัน · แปลงดินเอาจำนวนมากสุด · สัตว์รวมกัน · ฟาร์มหลักยึดอันที่เล่นมากกว่า
 function mergeProfiles(list) {
   const arr = (list || []).filter(Boolean).slice().sort((a, b) => (b.answered || 0) - (a.answered || 0));
@@ -2246,12 +2277,14 @@ const lessonLevel = id => LESSON_BY_ID[id] ? LESSON_BY_ID[id].level : null;
 function splitSave(d) {
   const parts = {};
   parts[CLOUD_SHARED_KEY] = { ok: d.ok || {}, bad: d.bad || {}, lok: d.lok || {} };
+  if (d.pin) parts[CLOUD_SHARED_KEY].pin = d.pin;        // รหัสผู้ปกครอง (แฮช) + วันสอบที่ผู้ปกครองตั้ง ใช้ร่วมทุกเครื่องของครอบครัว
+  if (d.exam) parts[CLOUD_SHARED_KEY].exam = d.exam;
   (d.profiles || []).forEach(p => {
     const farm = {};
     Object.keys(p).forEach(k => { if (LV_FIELDS.indexOf(k) < 0 && k !== 'level') farm[k] = p[k]; });   // level อยู่ในเครื่อง ไม่ขึ้นเน็ต
     parts['p:' + p.id] = farm;
     LEVEL_IDS.forEach(lv => {
-      const row = { stats: {}, review: [], lessons: {} };
+      const row = { stats: {}, review: [], lessons: {}, days: (p.days || {})[lv] || {}, miss: (p.miss || {})[lv] || {} };
       Object.keys(p.stats || {}).forEach(g => { if (genLevel(g) === lv) row.stats[g] = p.stats[g]; });
       (p.review || []).forEach(e => { if (genLevel(e.gen) === lv) row.review.push(e); });
       Object.keys(p.lessons || {}).forEach(l => { if (lessonLevel(l) === lv) row.lessons[l] = p.lessons[l]; });
@@ -2277,11 +2310,13 @@ function joinSave(rows, local) {
   const sh = rows[CLOUD_SHARED_KEY] || {}, profiles = [], farm = rows['p:' + PLAYER_ID];
   if (farm) {
     const p = Object.assign({}, farm);
-    p.stats = {}; p.review = []; p.lessons = {};
+    p.stats = {}; p.review = []; p.lessons = {}; p.days = {}; p.miss = {};
     LEVEL_IDS.forEach(lv => {
       const r = rows['lv:' + p.id + ':' + lv];
       if (!r) return;
       Object.assign(p.stats, r.stats || {}); (r.review || []).forEach(e => p.review.push(e)); Object.assign(p.lessons, r.lessons || {});
+      if (r.days && Object.keys(r.days).length) p.days[lv] = r.days;
+      if (r.miss && Object.keys(r.miss).length) p.miss[lv] = r.miss;
     });
     profiles.push(p);
   }
@@ -2289,6 +2324,8 @@ function joinSave(rows, local) {
   profiles.forEach(p => { p.level = level || 'm1'; });
   const d = { v: 2, current: profiles.length ? PLAYER_ID : null, sound: !local || local.sound !== false, profiles, ok: sh.ok || {}, bad: sh.bad || {}, lok: sh.lok || {} };
   if (level) d.level = level;
+  if (sh.pin) d.pin = sh.pin;
+  if (sh.exam) d.exam = sh.exam;
   return d;
 }
 function hashStr(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36) + ':' + s.length; }
@@ -2305,6 +2342,111 @@ function mergeRows(localParts, synced, cloudRows) {
   });
   return { rows, taken };
 }
+// ---------- สถิติรายวันสำหรับผู้ปกครอง (v0.21.0) ----------
+// วันที่เก็บเป็น "เลขวัน" (จำนวนวันนับจาก 1 ม.ค. 1970 ตามเขตเวลาของเครื่อง) ฟังก์ชันในส่วนนี้ไม่แตะนาฬิกา หน้าจอส่งเวลา (now) กับเขตเวลา (tzMin = นาทีที่เร็วกว่า UTC) เข้ามา
+const STAT_KEEP_DAYS = 120, MISS_KEEP = 50;
+function dayNum(now, tzMin) { return Math.floor((now + (tzMin || 0) * 60000) / 86400000); }
+function civilToDay(y, m, d) {
+  y -= m <= 2 ? 1 : 0;
+  const era = Math.floor(y / 400), yoe = y - era * 400;
+  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+function dayToCivil(z) {
+  z += 719468;
+  const era = Math.floor(z / 146097), doe = z - era * 146097;
+  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100)), mp = Math.floor((5 * doy + 2) / 153);
+  const d = doy - Math.floor((153 * mp + 2) / 5) + 1, m = mp + (mp < 10 ? 3 : -9);
+  return { y: yoe + era * 400 + (m <= 2 ? 1 : 0), m, d };
+}
+function parseIsoDay(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? civilToDay(+m[1], +m[2], +m[3]) : null; }
+// บันทึกการตอบ 1 ข้อลงสถิติรายวัน (แยกตามชั้นของหัวข้อ) + นับข้อเลือกตอบที่ผิดซ้ำ (ตอบถูกแล้วลดลงทีละ 1)
+function logAnswer(p, q, correct, now, tzMin, secs) {
+  const g = GEN_BY_ID[q.gen];
+  if (!g) return;
+  const lv = g.level, today = dayNum(now, tzMin);
+  p.days = p.days || {};
+  const days = p.days[lv] || (p.days[lv] = {});
+  const day = days[today] || (days[today] = {}), e = day[g.subject] || (day[g.subject] = [0, 0, 0]);
+  e[0] += 1; if (correct) e[1] += 1;
+  e[2] += Math.max(0, Math.min(120, Math.round(secs || 0)));
+  Object.keys(days).forEach(k => { if (+k < today - STAT_KEEP_DAYS) delete days[k]; });
+  if (q.itemId) {
+    p.miss = p.miss || {};
+    const m = p.miss[lv] || (p.miss[lv] = {});
+    if (!correct) m[q.itemId] = (m[q.itemId] || 0) + 1;
+    else if (m[q.itemId]) { m[q.itemId] -= 1; if (m[q.itemId] <= 0) delete m[q.itemId]; }
+    const ks = Object.keys(m);
+    if (ks.length > MISS_KEEP) { ks.sort((a, b) => m[b] - m[a]); ks.slice(MISS_KEEP).forEach(k => { delete m[k]; }); }
+  }
+}
+function dayTotal(p, lv, k, subj) {
+  const day = ((p.days || {})[lv] || {})[k], t = { n: 0, r: 0, sec: 0 };
+  if (day) Object.keys(day).forEach(s => { if (!subj || s === subj) { t.n += day[s][0]; t.r += day[s][1]; t.sec += day[s][2]; } });
+  return t;
+}
+// รวมวัน from..to (รวมทั้งสองปลาย) · played = จำนวนวันที่มีการเล่น
+function rangeTotal(p, lv, from, to, subj) {
+  const t = { n: 0, r: 0, sec: 0, played: 0 };
+  for (let k = from; k <= to; k++) { const d = dayTotal(p, lv, k, subj); t.n += d.n; t.r += d.r; t.sec += d.sec; if (d.n) t.played++; }
+  return t;
+}
+// count วันล่าสุด เรียงจากเก่าไปใหม่ (วันสุดท้าย = today)
+function lastDays(p, lv, today, count) {
+  const out = [];
+  for (let i = count - 1; i >= 0; i--) out.push(Object.assign({ k: today - i }, dayTotal(p, lv, today - i)));
+  return out;
+}
+// เล่นต่อเนื่องกี่วัน (นับรวมทั้งสองชั้น · วันนี้ยังไม่เล่นก็นับต่อจากเมื่อวาน)
+function streakDays(p, today) {
+  const any = k => dayTotal(p, 'm1', k).n + dayTotal(p, 'm4', k).n > 0;
+  let k = any(today) ? today : today - 1, n = 0;
+  while (any(k) && n <= STAT_KEEP_DAYS) { n++; k--; }
+  return n;
+}
+// เทียบ 7 วันล่าสุดกับ 7 วันก่อนหน้า ของวิชาหนึ่ง
+function subjectTrend(p, lv, subj, today) {
+  return { cur: rangeTotal(p, lv, today - 6, today, subj), prev: rangeTotal(p, lv, today - 13, today - 7, subj) };
+}
+// หัวข้อที่ถูกน้อยที่สุด (ต้องตอบแล้วอย่างน้อย minN ข้อ กันสรุปจากข้อมูลน้อยเกิน) พร้อมจำนวนวัชพืชค้างของหัวข้อนั้น
+function focusTopics(p, lv, limit, minN) {
+  const out = [];
+  GENS.forEach(g => {
+    const st = p.stats && p.stats[g.id];
+    if (g.level !== lv || !st || st.r + st.w < minN) return;
+    out.push({ gen: g.id, topic: g.topic, subject: g.subject, tier: g.tier, n: st.r + st.w, acc: st.r / (st.r + st.w), weed: (p.review || []).some(e => e.gen === g.id) });
+  });
+  out.sort((a, b) => a.acc - b.acc || b.n - a.n);
+  return out.slice(0, limit);
+}
+function topMisses(p, lv, limit) {
+  const m = (p.miss || {})[lv] || {};
+  return Object.keys(m).sort((a, b) => m[b] - m[a] || (a < b ? -1 : 1)).slice(0, limit).map(id => ({ id, n: m[id] }));
+}
+// รหัสผู้ปกครอง 4 หลัก: เก็บเป็นค่าแฮช เพื่อกันเด็กเข้าหน้าผู้ปกครองเท่านั้น ไม่ใช่ความปลอดภัยระดับธนาคาร
+function pinHash(pin) { return hashStr('a|' + pin + '|sq') + '-' + hashStr('z' + pin + '|level'); }
+// ---------- ผลตรวจเฉลยกลาง (admin เป็นผู้ตรวจ v0.21.0) ----------
+// rev = { รหัสข้อ: { s: 'ok' | 'bad', sig } } sig = ลายนิ้วมือของเนื้อข้อ (โจทย์ ตัวเลือก เฉลย) ถ้าแก้ข้อภายหลัง sig ไม่ตรง → กลับเป็น "รอตรวจ"
+function itemSig(x) { return hashStr(JSON.stringify([x.q, x.c, x.a])); }
+function lessonSig(l) { return hashStr(JSON.stringify(l)); }
+function reviewStatus(rev, id, sig) { const r = rev && rev[id]; return r && r.sig === sig ? r.s : 'todo'; }
+let ITEM_INDEX = null;
+function getItemIndex() {
+  if (!ITEM_INDEX) {
+    ITEM_INDEX = {};
+    ['sci', 'soc', 'th', 'en'].forEach(s => listBank(s).forEach(x => { x.sig = itemSig(x); ITEM_INDEX[x.id] = x; }));
+  }
+  return ITEM_INDEX;
+}
+// ข้อที่ต้องซ่อนจากการออกโจทย์: admin ตัดสินว่าผิด/กำกวม หรือครอบครัวกด 🚩 ไว้และ admin ยังไม่รับรองว่าถูก
+function hiddenMap(rev, famBad) {
+  const idx = getItemIndex(), out = {};
+  Object.keys(rev || {}).forEach(id => { if (idx[id] && reviewStatus(rev, id, idx[id].sig) === 'bad') out[id] = true; });
+  Object.keys(famBad || {}).forEach(id => { const x = idx[id]; if (!(x && reviewStatus(rev, id, x.sig) === 'ok')) out[id] = true; });
+  return out;
+}
 // ===== LOGIC END =====
 </script>
 
@@ -2313,6 +2455,13 @@ function mergeRows(localParts, synced, cloudRows) {
 const STORE_KEY = 'studyquest_v1';
 const S = { data: null, lesson: null, view: 'login', tab: 'farm', subject: 'math', tier: 'core', parentSubject: 'math', reviewSubject: 'sci', reviewTodo: true, quiz: null, lsub: 'all', storageOk: true, audio: null, sig: '', toastTimer: 0 };
 const $ = id => document.getElementById(id);
+S.parentOk = false; S.pLevel = null; S.pin = { buf: '', first: null, fails: 0, until: 0 }; S.reports = null; S.reviewTopic = {}; S.hide = {};
+// ผลตรวจเฉลยกลาง (admin เป็นผู้ตรวจ เก็บในตาราง sq_review บน Supabase) { รหัสข้อ: { s: 'ok'|'bad', sig } } · เก็บสำเนาในเครื่องไว้ใช้ตอนเน็ตหลุด
+const REV_KEY = 'studyquest_rev';
+let REV = {};
+function rebuildHide() { S.hide = hiddenMap(REV, S.data && S.data.bad); }
+const isApproved = id => { const x = getItemIndex()[id]; return !!x && reviewStatus(REV, id, x.sig) === 'ok'; };
+const lessonApproved = l => reviewStatus(REV, 'lesson:' + l.id, lessonSig(l)) === 'ok';
 const rng = makeRng((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cur = () => S.data.profiles.find(p => p.id === S.data.current);
@@ -2343,6 +2492,7 @@ function normalizeData() {
   unifyPlayers(S.data);
   migrateBankIds(S.data);
   S.data.profiles.forEach(p => { ensureFarmExtras(p); ensureOrders(p, rng); });
+  rebuildHide();
 }
 // เข้าเกมแล้วเข้าฟาร์มเลย ไม่มีหน้าเลือกชั้น (ชั้นเริ่มต้น ม.1 สลับได้ด้วยปุ่มที่แถบบน)
 function startView() { S.view = 'main'; S.tab = 'farm'; }
@@ -2427,6 +2577,7 @@ async function authSubmit() {
 function enterCloud() {
   S.mode = 'cloud'; lsPut(MODE_KEY, 'cloud');
   CLOUD.synced = loadSynced(); CLOUD.pulled = false;
+  try { REV = JSON.parse(lsGet(REV_KEY)) || {}; } catch (e) { REV = {}; }
   const firstTime = !lsGet(cacheKey());
   initData();
   startView(); S.auth.note = ''; setCloud('sending'); render();
@@ -2435,6 +2586,7 @@ function enterCloud() {
 function toLogin(note) {
   clearTimeout(CLOUD.timer);
   S.mode = 'login'; S.view = 'login'; S.quiz = null; S.lesson = null; closeModal();
+  CLOUD.admin = false; CLOUD.auxAt = 0; S.reports = null; S.parentOk = false; S.pin = { buf: '', first: null, fails: 0, until: 0 };
   S.auth = { mode: 'in', email: S.auth.email, busy: false, note: note || '' };
   render();
 }
@@ -2512,6 +2664,7 @@ async function cloudRun(opt) {
       CLOUD.pulled = true;
     }
     await cloudPush(await ensureToken());
+    if (opt.first || !CLOUD.auxAt || Date.now() - CLOUD.auxAt > 300000) await cloudAux(await ensureToken());   // ผลตรวจเฉลยกลาง + สถานะ admin (ไม่ทำให้สถานะเซฟเสีย ถ้าตารางยังไม่พร้อม)
     setCloud('ok');
   } catch (e) {
     if (e && e.expired) { lsDel(AUTH_KEY); CLOUD.session = null; toLogin('การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง (ข้อมูลที่ยังไม่ได้ส่งยังเก็บอยู่ในเครื่อง)'); }
@@ -2519,6 +2672,76 @@ async function cloudRun(opt) {
   } finally {
     CLOUD.busy = false;
     if (CLOUD.again) { CLOUD.again = false; clearTimeout(CLOUD.timer); CLOUD.timer = setTimeout(() => cloudRun({ pull: false }), 300); }
+  }
+}
+// ---------- ผลตรวจเฉลยกลาง + admin (v0.21.0) ----------
+async function fetchAll(path, tok) {                   // Supabase ส่งได้ครั้งละ 1,000 แถว → ดึงทีละหน้า
+  const out = [];
+  for (let off = 0; off < 20000; off += 1000) {
+    const r = await sbFetch(path + '&limit=1000&offset=' + off, { token: tok });
+    if (!r.ok || !Array.isArray(r.json)) return null;
+    r.json.forEach(x => out.push(x));
+    if (r.json.length < 1000) return out;
+  }
+  return out;
+}
+async function cloudAux(tok) {
+  CLOUD.auxAt = Date.now();
+  try {
+    const a = await sbFetch('/rest/v1/sq_admins?select=user_id', { token: tok });
+    const wasAdmin = !!CLOUD.admin, before = Object.keys(REV).length;
+    CLOUD.admin = !!(a.ok && Array.isArray(a.json) && a.json.length);
+    const rows = await fetchAll('/rest/v1/sq_review?select=item_id,status,sig&order=item_id.asc', tok);
+    if (rows) {
+      const o = {}; rows.forEach(x => { o[x.item_id] = { s: x.status, sig: x.sig }; });
+      REV = o; lsPut(REV_KEY, JSON.stringify(REV)); rebuildHide();
+    }
+    if (CLOUD.admin) loadReports(tok);
+    if (!S.quiz && !S.lesson && S.view === 'main' && (CLOUD.admin !== wasAdmin || Object.keys(REV).length !== before) && !$('modal').classList.contains('on')) render();
+  } catch (e) { /* ผลตรวจกลางโหลดไม่ได้ก็เล่นต่อได้ ใช้สำเนาในเครื่อง */ }
+}
+async function loadReports(tok) {
+  try {
+    const r = await sbFetch('/rest/v1/sq_reports?select=item_id,at&order=at.desc&limit=1000', { token: tok || await ensureToken() });
+    if (!r.ok || !Array.isArray(r.json)) { S.reports = S.reports || []; return; }
+    const g = {}; r.json.forEach(x => { (g[x.item_id] = g[x.item_id] || { id: x.item_id, n: 0 }).n++; });
+    S.reports = Object.keys(g).map(k => g[k]).sort((a, b) => b.n - a.n);
+    if (S.view === 'main' && S.tab === 'admin' && !S.quiz) render();
+  } catch (e) { S.reports = S.reports || []; }
+}
+function reportItem(id) {                              // เด็ก/ผู้ปกครองกด 🚩: แจ้ง admin (ส่งไม่ได้ก็ไม่เป็นไร ข้อนั้นถูกซ่อนในครอบครัวแล้ว)
+  if (S.mode !== 'cloud' || !CLOUD.session) return;
+  ensureToken().then(tok => sbFetch('/rest/v1/sq_reports', { method: 'POST', token: tok, headers: { Prefer: 'return=minimal' }, body: [{ user_id: CLOUD.session.uid, item_id: id }] })).catch(() => { });
+}
+async function deleteReports(id) {
+  try { await sbFetch('/rest/v1/sq_reports?item_id=eq.' + encodeURIComponent(id), { method: 'DELETE', token: await ensureToken(), headers: { Prefer: 'return=minimal' } }); } catch (e) { }
+  if (S.reports) S.reports = S.reports.filter(r => r.id !== id);
+}
+// admin ตัดสิน: status = 'ok' | 'bad' | 'todo' (ล้างผลตรวจ) · อัปเดตหน้าจอก่อน แล้วค่อยส่งขึ้นเน็ต ส่งไม่สำเร็จจะย้อนกลับและบอก
+async function adminSet(ids, status) {
+  if (!CLOUD.admin || !CLOUD.session) { toast('บัญชีนี้ไม่ใช่ admin'); return false; }
+  const idx = getItemIndex();
+  const sigOf = id => id.indexOf('lesson:') === 0 ? (LESSON_BY_ID[id.slice(7)] ? lessonSig(LESSON_BY_ID[id.slice(7)]) : null) : (idx[id] ? idx[id].sig : null);
+  ids = ids.filter(id => sigOf(id) !== null);
+  if (!ids.length) return true;
+  const prev = {};
+  ids.forEach(id => { prev[id] = REV[id]; if (status === 'todo') delete REV[id]; else REV[id] = { s: status, sig: sigOf(id) }; });
+  rebuildHide(); lsPut(REV_KEY, JSON.stringify(REV)); render();
+  try {
+    const tok = await ensureToken();
+    for (let i = 0; i < ids.length; i += 200) {
+      const part = ids.slice(i, i + 200);
+      const r = status === 'todo'
+        ? await sbFetch('/rest/v1/sq_review?item_id=in.(' + encodeURIComponent(part.map(id => '"' + id.replace(/"/g, '') + '"').join(',')) + ')', { method: 'DELETE', token: tok, headers: { Prefer: 'return=minimal' } })
+        : await sbFetch('/rest/v1/sq_review?on_conflict=item_id', { method: 'POST', token: tok, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: part.map(id => ({ item_id: id, status, sig: sigOf(id) })) });
+      if (!r.ok) throw r.status === 404 ? { text: 'ยังไม่ได้สร้างตารางตรวจเฉลยบน Supabase (ต้องรัน SQL ใหม่)' } : r.status === 401 || r.status === 403 ? { text: 'บัญชีนี้ไม่มีสิทธิ์ admin' } : cloudErr(r);
+    }
+    return true;
+  } catch (e) {
+    ids.forEach(id => { if (prev[id]) REV[id] = prev[id]; else delete REV[id]; });
+    rebuildHide(); lsPut(REV_KEY, JSON.stringify(REV)); render();
+    toast('บันทึกผลตรวจไม่สำเร็จ ย้อนกลับแล้ว: ' + (e && e.text || 'ลองใหม่'));
+    return false;
   }
 }
 document.addEventListener('visibilitychange', () => {
@@ -2581,8 +2804,10 @@ function viewMain() {
     '<span class="chip cloudchip" data-short="1" data-a="cloudinfo">' + cloudLabel(true) + '</span>' +
     '<button class="btn gray mini" data-a="sound">' + (S.data.sound ? '🔊' : '🔇') + '</button></div></div>';
   const tabs = [['farm', '🌱 ฟาร์ม'], ['orders', '📦 ออเดอร์'], ['learn', '📖 เรียน'], ['play', '📝 ตอบคำถาม'], ['parent', '👨‍👩‍👧 ผู้ปกครอง']];
+  if (CLOUD.admin) tabs.push(['admin', '🛡 admin']);
+  if (S.tab === 'admin' && !CLOUD.admin) S.tab = 'farm';
   h += '<div class="tabs">' + tabs.map(t => '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-a="tab" data-id="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
-  h += '<div class="content">' + (S.tab === 'farm' ? tabFarm(p) : S.tab === 'orders' ? tabOrders(p) : S.tab === 'learn' ? tabLearn(p) : S.tab === 'play' ? tabPlay(p) : tabParent(p)) + '</div>';
+  h += '<div class="content">' + (S.tab === 'farm' ? tabFarm(p) : S.tab === 'orders' ? tabOrders(p) : S.tab === 'learn' ? tabLearn(p) : S.tab === 'play' ? tabPlay(p) : S.tab === 'admin' ? tabAdmin(p) : tabParent(p)) + '</div>';
   return h;
 }
 // ภาพวาดอาคารในฟาร์ม (SVG ฝังในไฟล์ ไม่ใช้ภาพภายนอก)
@@ -2782,7 +3007,7 @@ function tabLearn(p) {
   if (S.lesson) {
     const l = LESSON_BY_ID[S.lesson.id], i = S.lesson.i, pg = l.pages[i], last = i === l.pages.length - 1;
     return '<div class="lesson"><div class="lhead"><b>' + l.icon + ' ' + esc(l.title) + '</b><span>' +
-      (S.data.lok[l.id] ? '' : '<span class="tag draft">ร่างโดย AI · รอผู้ปกครองตรวจ</span>') + '<span class="chip">' + (i + 1) + ' / ' + l.pages.length + '</span></span></div>' +
+      (lessonApproved(l) ? '' : '<span class="tag draft">ร่างโดย AI · รอตรวจ</span>') + '<span class="chip">' + (i + 1) + ' / ' + l.pages.length + '</span></span></div>' +
       '<div class="lbody"><div class="lfig">' + drawFig(pg.fig) + '</div><div class="lsay"><div class="guide">' + LESSON_GUIDE.icon + '</div><div class="bubble"><small>' + LESSON_GUIDE.name + '</small><br>' + pg.say + '</div></div></div>' +
       '<div class="lnav"><button class="btn gray" data-a="lexit">☰ เลือกบท</button><button class="btn gray" data-a="lprev"' + (i === 0 ? ' disabled' : '') + '>◀ ก่อนหน้า</button>' +
       '<button class="btn green" data-a="lnext">' + (last ? '✏️ ลองทำโจทย์ ▶' : 'ถัดไป ▶') + '</button></div></div>';
@@ -2829,65 +3054,158 @@ function tabPlay(p) {
   });
   return h + '</div></div>';
 }
-function tabParent(p) {
-  const now = Date.now();
-  const subj = S.parentSubject || 'math';
-  const stat = s => {                // ตอบแล้วกี่ข้อ ถูกกี่ข้อ ของทั้งวิชา
-    let n = 0, r = 0;
-    gensFor(p.level, s).forEach(g => { const st = p.stats[g.id]; if (st) { n += st.r + st.w; r += st.r; } });
-    return { n, r };
-  };
-  let h = '<div class="subjects">' + SUBJECT_IDS.map(s => {
-    const t = stat(s);
+// ---------- ผู้ปกครอง: รหัส 4 หลัก + สถิติของลูก (v0.21.0) ----------
+const tzMin = () => -new Date().getTimezoneOffset();
+const todayNum = () => dayNum(Date.now(), tzMin());
+const fmtDay = k => { const c = dayToCivil(k); return c.d + '/' + c.m; };
+const fmtMin = sec => { const m = Math.round(sec / 60); return m ? m + ' นาที' : sec ? '<1 นาที' : '0 นาที'; };
+const accPct = (r, n) => n ? Math.round(100 * r / n) : null;
+const cutText = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
+function tabParent(p) { return S.parentOk ? viewDash(p) : viewPinGate(); }
+function viewPinGate() {
+  const P = S.pin, has = !!S.data.pin, mode = has ? 'enter' : P.first ? 'confirm' : 'setup';
+  const title = mode === 'enter' ? 'ใส่รหัสผู้ปกครอง 4 หลัก' : mode === 'setup' ? 'ตั้งรหัสผู้ปกครอง 4 หลัก' : 'ใส่รหัสอีกครั้งเพื่อยืนยัน';
+  return '<div class="panel pingate"><h3>🔒 ' + title + '</h3>' +
+    '<div class="note">' + (mode === 'enter' ? 'หน้านี้ไว้ดูสถิติของลูกและตั้งค่า' : 'รหัสนี้กันไม่ให้เด็กเข้าหน้าสถิติและตั้งค่า (ใช้ร่วมทุกเครื่องของบัญชีนี้)') + '</div>' +
+    '<div class="pindots">' + [0, 1, 2, 3].map(i => '<i class="' + (i < P.buf.length ? 'on' : '') + '"></i>').join('') + '</div>' +
+    '<div class="pinpad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(k => k ? '<button data-a="pinkey" data-id="' + k + '">' + k + '</button>' : '<span></span>').join('') + '</div>' +
+    (has ? '<button class="btn gray mini" data-a="pinforgot">ลืมรหัส?</button>' : '') + '</div>';
+}
+function pinKey(k) {
+  const P = S.pin, now = Date.now();
+  if (P.until > now) { toast('ลองผิดหลายครั้ง รออีก ' + Math.ceil((P.until - now) / 1000) + ' วินาที'); return; }
+  if (k === '⌫') P.buf = P.buf.slice(0, -1); else if (P.buf.length < 4) P.buf += k;
+  if (P.buf.length === 4) {
+    if (S.data.pin) {
+      if (pinHash(P.buf) === S.data.pin) { S.parentOk = true; P.fails = 0; }
+      else { P.fails++; toast('รหัสไม่ถูกต้อง'); if (P.fails >= 5) { P.until = now + 30000; P.fails = 0; } }
+      P.buf = '';
+    } else if (!P.first) { P.first = P.buf; P.buf = ''; }
+    else if (P.first === P.buf) { S.data.pin = pinHash(P.buf); S.parentOk = true; P.first = null; P.buf = ''; save(); toast('ตั้งรหัสผู้ปกครองแล้ว'); }
+    else { toast('รหัสสองครั้งไม่ตรงกัน เริ่มใหม่'); P.first = null; P.buf = ''; }
+  }
+  render();
+}
+function viewDash(p) {
+  const lv = LEVELS[S.pLevel] ? S.pLevel : p.level, today = todayNum(), subj = S.parentSubject || 'math', now = Date.now();
+  const t0 = dayTotal(p, lv, today), wk = rangeTotal(p, lv, today - 6, today), pw = rangeTotal(p, lv, today - 13, today - 7), streak = streakDays(p, today);
+  const examK = parseIsoDay(S.data.exam), left = examK === null ? null : examK - today;
+  const a0 = accPct(t0.r, t0.n), aw = accPct(wk.r, wk.n), ap = accPct(pw.r, pw.n);
+  const arrow = (a, b, na, nb) => na >= 5 && nb >= 5 && a !== null && b !== null ? (a - b >= 5 ? ' <span class="up">▲</span>' : b - a >= 5 ? ' <span class="dn">▼</span>' : '') : '';
+  let h = '<div class="parent"><div class="main"><div class="row lvbar">' +
+    LEVEL_IDS.map(id => '<button class="btn mini ' + (lv === id ? 'green' : 'gray') + '" data-a="plevel" data-id="' + id + '">' + LEVELS[id].icon + ' ' + (id === 'm1' ? 'ม.1' : 'ม.4') + '</button>').join('') +
+    '<small>สถิติของชั้นที่เลือก · เล่นมาแล้วทั้งหมด <b>' + p.answered + '</b> ข้อ</small></div>';
+  h += '<div class="kpis">' +
+    '<div class="kpi"><small>📅 วันนี้</small><b>' + t0.n + ' ข้อ</b><small>' + (a0 === null ? 'ยังไม่ได้เล่น' : 'ถูก ' + a0 + '% · ' + fmtMin(t0.sec)) + '</small></div>' +
+    '<div class="kpi"><small>🗓 7 วันล่าสุด</small><b>เล่น ' + wk.played + '/7 วัน</b><small>' + wk.n + ' ข้อ' + (aw === null ? '' : ' · ถูก ' + aw + '%') + arrow(aw, ap, wk.n, pw.n) + '</small></div>' +
+    '<div class="kpi"><small>🔥 เล่นต่อเนื่อง</small><b>' + streak + ' วัน</b><small>' + (streak ? 'ไม่ขาดเลย' : 'วันนี้ยังไม่ได้เล่น') + '</small></div>' +
+    '<button class="kpi" data-a="examset"><small>🎯 วันสอบ</small><b>' + (left === null ? 'ตั้งวันสอบ' : left > 0 ? 'อีก ' + left + ' วัน' : left === 0 ? 'วันนี้!' : 'สอบแล้ว') + '</b><small>' + (examK === null ? 'กดเพื่อตั้งวันที่' : fmtDay(examK) + ' · กดเพื่อแก้') + '</small></button></div>';
+  const days = lastDays(p, lv, today, 14), mx = Math.max(5, ...days.map(d => d.n));
+  h += '<div class="panel chart"><div class="ctitle">จำนวนข้อที่ทำ 14 วันล่าสุด <small>สีเขียว = ถูก 80% ขึ้นไป · เหลือง 50-79% · แดง ต่ำกว่า 50%</small></div>' +
+    '<svg viewBox="0 0 280 64" role="img" aria-label="กราฟจำนวนข้อที่ทำรายวัน">' + days.map((d, i) => {
+      const a = accPct(d.r, d.n), hh = d.n ? Math.max(4, Math.round(40 * d.n / mx)) : 2, x = 4 + i * 19.5, col = !d.n ? '#d9ccb0' : a >= 80 ? 'var(--good)' : a >= 50 ? 'var(--gold)' : 'var(--bad)';
+      return '<g><title>' + fmtDay(d.k) + ': ' + d.n + ' ข้อ' + (a === null ? '' : ' ถูก ' + a + '%') + '</title><rect x="' + x + '" y="' + (48 - hh) + '" width="15" height="' + hh + '" rx="3" style="fill:' + col + '"/>' +
+        (d.n ? '<text x="' + (x + 7.5) + '" y="' + (46 - hh) + '" font-size="7" text-anchor="middle" fill="#6b4a2b">' + d.n + '</text>' : '') +
+        '<text x="' + (x + 7.5) + '" y="60" font-size="7" text-anchor="middle" fill="#6b4a2b">' + fmtDay(d.k) + '</text></g>';
+    }).join('') + '</svg></div>';
+  const stat = s => { let n = 0, r = 0; gensFor(lv, s).forEach(g => { const st = p.stats[g.id]; if (st) { n += st.r + st.w; r += st.r; } }); return { n, r }; };
+  h += '<div class="subjects">' + SUBJECT_IDS.map(s => {
+    const t = stat(s), tr = subjectTrend(p, lv, s, today);
     return '<button class="tab' + (subj === s ? ' on' : '') + '" data-a="psubject" data-id="' + s + '">' + SUBJECTS[s].icon + ' ' + SUBJECTS[s].name +
-      '<br><small>' + (t.n ? Math.round(100 * t.r / t.n) + '% · ' + t.n + ' ข้อ' : 'ยังไม่เคยเล่น') + '</small></button>';
-  }).join('') + '</div><div class="parent"><div class="main"><div class="panel detail"><b>' + SUBJECTS[subj].icon + ' ' + SUBJECTS[subj].name +
-    '</b> <small>(ของ ' + esc(p.name) + ' · ' + LEVELS[p.level].label + ' · แถบแดง = ควรฝึกเพิ่ม)</small>';
-  gensFor(p.level, subj).forEach(g => {
+      '<br><small>' + (t.n ? Math.round(100 * t.r / t.n) + '% · ' + t.n + ' ข้อ' : 'ยังไม่เคยเล่น') + arrow(accPct(tr.cur.r, tr.cur.n), accPct(tr.prev.r, tr.prev.n), tr.cur.n, tr.prev.n) + '</small></button>';
+  }).join('') + '</div>';
+  h += '<div class="panel detail"><b>' + SUBJECTS[subj].icon + ' ' + SUBJECTS[subj].name + '</b> <small>(' + LEVELS[lv].label + ' · แถบแดง = ควรฝึกเพิ่ม · ▲▼ = เทียบกับ 7 วันก่อนหน้า)</small>';
+  gensFor(lv, subj).forEach(g => {
     const st = p.stats[g.id], cnt = st ? st.r + st.w : 0, acc = topicAccuracy(p, g.id);
-    const cls = acc === null ? '' : acc < 0.5 ? 'low' : acc < 0.8 ? 'mid' : '';
     h += '<div class="row"><div class="name">' + esc(g.topic) + '<span class="tag ' + g.tier + '">' + TIER_LABEL[g.tier] + '</span></div>' +
-      '<div class="bar"><i class="' + cls + '" style="width:' + (acc === null ? 0 : Math.round(acc * 100)) + '%"></i></div>' +
+      '<div class="bar"><i class="' + (acc === null ? '' : acc < 0.5 ? 'low' : acc < 0.8 ? 'mid' : '') + '" style="width:' + (acc === null ? 0 : Math.round(acc * 100)) + '%"></i></div>' +
       '<div style="width:100px;text-align:right;font-size:14px">' + (acc === null ? '—' : Math.round(acc * 100) + '% (' + cnt + ')') + '</div></div>';
   });
-  const rv = reviewCounts();
-  h += '</div></div><div class="side"><div class="panel">ตอบไปแล้ว <b>' + p.answered + '</b> ข้อ · วัชพืชรอทบทวน <b>' + dueReviews(p, now).length + '</b> หัวข้อ</div>' +
-    '<div class="panel"><b>🧐 ตรวจเฉลยข้อสอบ</b><div class="note">วิทย์/สังคม/ไทย/อังกฤษ แบบเลือกตอบ AI เป็นผู้เขียน ตรวจแล้ว ' + rv.ok + '/' + rv.total + ' ข้อ · ซ่อน ' + rv.bad + ' ข้อ</div>' +
-    '<button class="btn big" style="margin-top:6px" data-a="review">เปิดหน้าตรวจเฉลย</button></div>' +
-    '<div class="panel"><b>📖 ตรวจบทเรียน</b><div class="note">AI เป็นผู้เขียน อ่านแล้วกด ✔ เมื่อเนื้อหาถูกต้อง ป้าย "รอตรวจ" จะหาย</div>' +
-    lessonsFor(p.level).map(l => '<div class="row" style="justify-content:space-between"><span>' + l.icon + ' ' + esc(l.title) + '</span><button class="btn mini ' + (S.data.lok[l.id] ? 'green' : 'gray') + '" data-a="lok" data-id="' + l.id + '">' + (S.data.lok[l.id] ? '✔ ตรวจแล้ว' : 'ยังไม่ตรวจ') + '</button></div>').join('') + '</div>';
+  h += '</div></div><div class="side">';
+  const foc = focusTopics(p, lv, 5, 5), weeds = dueReviews(p, now).length;
+  h += '<div class="panel"><b>🎯 ควรเน้นสัปดาห์นี้</b>' + (foc.length ? foc.map(f => '<div class="row" style="justify-content:space-between;margin:2px 0"><span>' + SUBJECTS[f.subject].icon + ' ' + esc(f.topic) + (f.weed ? ' 🌿' : '') + '</span><b>' + Math.round(100 * f.acc) + '% <small>(' + f.n + ')</small></b></div>').join('') :
+    '<div class="note">ยังมีข้อมูลไม่พอ (ต้องตอบหัวข้อละ 5 ข้อขึ้นไป)</div>') + '<div class="note">วัชพืชรอทบทวนตอนนี้ ' + weeds + ' หัวข้อ</div></div>';
+  const idx = getItemIndex(), ms = topMisses(p, lv, 10).filter(m => idx[m.id]);
+  h += '<div class="panel"><b>🔁 ข้อที่ผิดซ้ำ</b>' + (ms.length ? ms.map(m => {
+    const x = idx[m.id], t = x.vocab ? '🔤 ' + x.q + ' = ' + x.c[0] : x.spell ? '📝 คำที่ถูก: ' + x.q : cutText(x.q, 70) + ' → ' + CHOICE_LABELS[x.a] + '. ' + cutText(x.c[x.a], 40);
+    return '<div class="miss"><span>' + escHtml(t) + '</span><small>ผิด ' + m.n + ' ครั้ง</small></div>';
+  }).join('') : '<div class="note">ยังไม่มีข้อที่ผิดซ้ำ ตอบผิดแล้วกลับมาตอบถูก ข้อนั้นจะหายไปจากรายการเอง</div>') + '</div>';
   h += '<div class="panel"><b>ตั้งค่า</b><div class="row">สัดส่วนข้อท้าทายในด่านผสม: ' +
     '<select data-a="stretch" style="font:inherit;padding:6px">' + [0, 0.1, 0.2, 0.3, 0.4, 0.5].map(v =>
       '<option value="' + v + '"' + (Math.abs(p.stretch - v) < 0.001 ? ' selected' : '') + '>' + Math.round(v * 100) + '%</option>').join('') + '</select></div>' +
     '<div class="note">แนะนำ: เดือนแรก 10-20% แล้วเพิ่มเป็น 30% ขึ้นไปในเดือนที่ 2-3</div>' +
-    '<div class="row"><button class="btn gray" data-a="rename" data-id="' + p.id + '">✏️ เปลี่ยนชื่อ</button>' +
-    '<button class="btn red" data-a="reset">🗑 ล้างข้อมูล</button></div>' +
+    '<div class="row"><button class="btn gray mini" data-a="pinchange">🔑 เปลี่ยนรหัส</button><button class="btn gray mini" data-a="plock">🔒 ล็อก</button><button class="btn gray mini" data-a="rename" data-id="' + p.id + '">✏️ ชื่อ</button></div>' +
+    '<div class="row"><button class="btn red mini" data-a="reset">🗑 ล้างข้อมูลทั้งหมด</button></div>' +
     '<div class="row"><span class="chip cloudchip">' + cloudLabel(false) + '</span><small>' + esc(CLOUD.session ? CLOUD.session.email : '') + '</small>' +
     '<button class="btn gray mini" data-a="alogout">ออกจากระบบ</button></div></div></div></div>';
   return h;
 }
-// ---------- ตรวจเฉลย (ผู้ปกครอง) ----------
-function reviewCounts() {
-  let total = 0, ok = 0, bad = 0;
-  ['sci', 'soc', 'th', 'en'].forEach(s => listBank(s).forEach(x => {
-    total++; if (S.data.ok[x.id]) ok++; if (S.data.bad[x.id]) bad++;
-  }));
-  return { total, ok, bad };
+// ---------- admin: ตรวจเฉลย (ผลตรวจเก็บในตารางกลาง sq_review บน Supabase) ----------
+const rvSt = x => reviewStatus(REV, x.id, itemSig(x));
+function adminCounts() {
+  const out = {};
+  ['sci', 'soc', 'th', 'en'].forEach(s => { const c = out[s] = { total: 0, ok: 0, bad: 0 }; listBank(s).forEach(x => { c.total++; const st = rvSt(x); if (st === 'ok') c.ok++; else if (st === 'bad') c.bad++; }); });
+  const c = out.lesson = { total: 0, ok: 0, bad: 0 };
+  LESSONS.forEach(l => { c.total++; const st = reviewStatus(REV, 'lesson:' + l.id, lessonSig(l)); if (st === 'ok') c.ok++; else if (st === 'bad') c.bad++; });
+  return out;
+}
+function tabAdmin(p) {
+  const c = adminCounts(), names = { sci: '🔬 วิทยาศาสตร์', soc: '🌏 สังคม', th: '📖 ภาษาไทย', en: '🔤 อังกฤษ', lesson: '📖 บทเรียน' };
+  let h = '<div class="parent"><div class="main"><div class="panel detail"><b>🛡 ตรวจเฉลย (admin)</b>' +
+    '<div class="note">ผลตรวจใช้กับทุกบัญชี ข้อที่ตรวจว่าถูกจะเอาป้าย "ร่างโดย AI · รอตรวจ" ออก ข้อที่ตรวจว่าผิด/กำกวมจะถูกซ่อนจากการออกโจทย์ · ถ้าแก้เนื้อข้อสอบภายหลัง ข้อนั้นกลับเป็น "รอตรวจ" เอง</div>';
+  Object.keys(names).forEach(k => {
+    const x = c[k], todo = x.total - x.ok - x.bad;
+    h += '<div class="row"><div class="name">' + names[k] + '</div><div class="bar"><i style="width:' + Math.round(100 * x.ok / Math.max(1, x.total)) + '%"></i></div>' +
+      '<div style="width:190px;text-align:right;font-size:14px">✅ ' + x.ok + ' · 🚩 ' + x.bad + ' · รอ ' + todo + '</div></div>';
+  });
+  h += '<div class="row"><button class="btn big green" data-a="review">เปิดหน้าตรวจเฉลย</button><button class="btn gray" data-a="adminrefresh">🔄 โหลดผลตรวจล่าสุด</button></div></div></div><div class="side">';
+  h += '<div class="panel"><b>🚩 ข้อที่ถูกรายงาน</b>';
+  if (!S.reports) h += '<div class="note">กำลังโหลด…</div>';
+  else if (!S.reports.length) h += '<div class="note">ไม่มีรายงานค้างอยู่ 🎉</div>';
+  else {
+    const idx = getItemIndex();
+    h += S.reports.slice(0, 30).map(r => {
+      const x = idx[r.id];
+      return '<div class="miss"><span>' + (x ? escHtml(cutText(x.vocab ? x.q + ' = ' + x.c[0] : x.spell ? 'สะกด: ' + x.q : x.q, 80)) : esc(r.id)) + '</span><small>รายงาน ' + r.n + ' ครั้ง</small>' +
+        '<span class="row"><button class="btn green mini" data-a="repok" data-id="' + esc(r.id) + '">✔ ถูกแล้ว</button><button class="btn red mini" data-a="repbad" data-id="' + esc(r.id) + '">🚩 ซ่อน</button><button class="btn gray mini" data-a="repdel" data-id="' + esc(r.id) + '">ลบรายงาน</button></span></div>';
+    }).join('');
+  }
+  return h + '</div><div class="panel"><div class="note">บัญชี admin: ' + esc(CLOUD.session ? CLOUD.session.email : '') + '</div></div></div></div>';
 }
 // ข้อความสั้น ๆ บอกที่มาของเฉลยของวิชาที่เลือก (ต่อท้ายบรรทัดอธิบายในหน้าเลือกด่าน)
 function subjectNote() {
   if (!BANK_TOPICS.some(t => t.subject === S.subject)) return ' · วิชานี้โปรแกรมตรวจเฉลยให้ได้ 100%';
-  return ' · ℹ️ ข้อเลือกตอบ AI เป็นผู้เขียน ยังมีป้าย “ร่าง” จนกว่าผู้ปกครองตรวจ เจอเฉลยน่าจะผิดกด 🚩 ข้อนั้นจะถูกซ่อน' +
+  return ' · ℹ️ ข้อเลือกตอบ AI เป็นผู้เขียน ยังมีป้าย “ร่าง” จนกว่า admin ตรวจ เจอเฉลยน่าจะผิดกด 🚩 ข้อนั้นจะถูกซ่อนและแจ้ง admin' +
     (S.subject === 'sci' ? ' (ข้อ “คำนวณ” ตรวจเฉลยโดยโปรแกรม 100%)' : '');
 }
 function viewReview() {
   const subj = S.reviewSubject || 'sci';
-  let h = '<div class="top"><div class="title">🧐 ตรวจเฉลยข้อสอบ</div><div class="chips"><button class="btn gray mini" data-a="reviewback">⬅ กลับ</button></div></div>';
-  h += '<div class="subjects">' + ['sci', 'soc', 'th', 'en'].map(s => '<button class="tab' + (subj === s ? ' on' : '') + '" data-a="rsubject" data-id="' + s + '">' + SUBJECTS[s].icon + ' ' + SUBJECTS[s].name + '</button>').join('') + '</div>';
+  let h = '<div class="top"><div class="title">🧐 ตรวจเฉลย (admin)</div><div class="chips"><span class="chip cloudchip">' + cloudLabel(false) + '</span><button class="btn gray mini" data-a="reviewback">⬅ กลับ</button></div></div>';
+  h += '<div class="subjects">' + ['sci', 'soc', 'th', 'en', 'lesson'].map(s => '<button class="tab' + (subj === s ? ' on' : '') + '" data-a="rsubject" data-id="' + s + '">' + (s === 'lesson' ? '📖 บทเรียน' : SUBJECTS[s].icon + ' ' + SUBJECTS[s].name) + '</button>').join('') + '</div>';
   const onlyTodo = S.reviewTodo !== false;
-  h += '<div class="content"><div class="panel">อ่านโจทย์และเฉลย (✅ = ตัวเลือกที่ระบบถือว่าถูก) กด “ถูกต้อง” ถ้าเห็นด้วย หรือ “เฉลยผิด/กำกวม” เพื่อซ่อนข้อนั้น · <label><input type="checkbox" data-a="rtodo"' + (onlyTodo ? ' checked' : '') + '> แสดงเฉพาะข้อที่ยังไม่ตรวจ</label></div>';
-  const items = listBank(subj).filter(x => !onlyTodo || (!S.data.ok[x.id] && !S.data.bad[x.id]));
-  if (!items.length) h += '<div class="panel">ไม่มีข้อที่ต้องตรวจในวิชานี้แล้ว 🎉</div>';
+  const intro = 'กด “ถูกต้อง” ถ้าเห็นด้วยกับเฉลย หรือ “ผิด/กำกวม” เพื่อซ่อนข้อนั้นจากทุกบัญชี · ผลตรวจบันทึกขึ้นเน็ตทันที · <label><input type="checkbox" data-a="rtodo"' + (onlyTodo ? ' checked' : '') + '> เฉพาะข้อที่ยังไม่ตรวจ</label>';
+  if (subj === 'lesson') {
+    h += '<div class="content"><div class="panel">อ่านเนื้อหาบทเรียนให้ครบ (ตัวเลขในรูปวาดดูในเกม) · ' + intro + '</div>';
+    LESSONS.forEach(l => {
+      const st = reviewStatus(REV, 'lesson:' + l.id, lessonSig(l));
+      if (onlyTodo && st !== 'todo') return;
+      h += '<div class="panel rv"><b>' + l.icon + ' ' + esc(l.title) + '</b> <small>(' + LEVELS[l.level].label + ' · ' + SUBJECTS[l.subject].name + ')</small>' +
+        '<div style="font-size:15px;margin:4px 0">' + l.pages.map((pg, i) => (i + 1) + '. ' + esc(pg.say || '')).join('<br>') + '</div><div class="row">' +
+        (st === 'ok' ? '<span class="chip">✅ ตรวจแล้ว</span>' : st === 'bad' ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
+        '<button class="btn green mini" data-a="rok" data-id="lesson:' + l.id + '">✔ ถูกต้อง</button><button class="btn red mini" data-a="rbad" data-id="lesson:' + l.id + '">🚩 ผิด/กำกวม</button>' +
+        (st !== 'todo' ? '<button class="btn gray mini" data-a="rrestore" data-id="lesson:' + l.id + '">↩ ล้างผลตรวจ</button>' : '') + '</div></div>';
+    });
+    return h + '</div>';
+  }
+  const all = listBank(subj), topics = [];
+  all.forEach(x => { if (!topics.some(t => t.id === x.topicId)) topics.push({ id: x.topicId, name: x.topic, level: x.level }); });
+  const topicId = topics.some(t => t.id === (S.reviewTopic || {})[subj]) ? S.reviewTopic[subj] : topics[0].id;
+  h += '<div class="content"><div class="panel">เลือกหัวข้อ: <select data-a="rtopic" style="font:inherit;padding:6px;max-width:100%">' + topics.map(t => {
+    const its = all.filter(x => x.topicId === t.id), todo = its.filter(x => rvSt(x) === 'todo').length;
+    return '<option value="' + t.id + '"' + (t.id === topicId ? ' selected' : '') + '>' + escHtml(t.name) + ' (' + LEVELS[t.level].label + ') · รอ ' + todo + '/' + its.length + '</option>';
+  }).join('') + '</select><br>อ่านโจทย์และเฉลย (✅ = ตัวเลือกที่ระบบถือว่าถูก) · ' + intro + '</div>';
+  const items = all.filter(x => x.topicId === topicId && (!onlyTodo || rvSt(x) === 'todo'));
+  if (!items.length) h += '<div class="panel">ไม่มีข้อที่ต้องตรวจในหัวข้อนี้แล้ว 🎉</div>';
   let last = '';
   items.forEach(x => {
     if (x.topic !== last) {
@@ -2897,25 +3215,25 @@ function viewReview() {
     }
     if (x.spell) {
       h += '<div class="panel rv"><div>📝 ✅ <b style="color:#1c7a36">' + escHtml(x.q) + '</b> &nbsp; ❌ ' + x.c.map(escHtml).join(' · ') + '</div><div style="font-size:15px">💡 ' + escHtml(x.e) + '</div><div class="row" style="margin-top:6px">' +
-        (S.data.ok[x.id] ? '<span class="chip">✅ ตรวจแล้ว</span>' : '') + (S.data.bad[x.id] ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
+        ((rvSt(x) === 'ok') ? '<span class="chip">✅ ตรวจแล้ว</span>' : '') + ((rvSt(x) === 'bad') ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
         '<button class="btn green mini" data-a="rok" data-id="' + x.id + '">✔ ถูกต้อง</button><button class="btn red mini" data-a="rbad" data-id="' + x.id + '">🚩 ผิด/กำกวม</button>' +
-        (S.data.bad[x.id] ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩ นำกลับ</button>' : '') + '</div></div>';
+        ((rvSt(x) === 'bad') ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩ นำกลับ</button>' : '') + '</div></div>';
       return;
     }
     if (x.vocab) {
       h += '<div class="panel rv"><div class="row" style="justify-content:space-between"><span>🔤 <b>' + escHtml(x.q) + '</b> = <b style="color:#1c7a36">' + escHtml(x.c[0]) + '</b></span><span class="row">' +
-        (S.data.ok[x.id] ? '<span class="chip">✅</span>' : '') + (S.data.bad[x.id] ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
+        ((rvSt(x) === 'ok') ? '<span class="chip">✅</span>' : '') + ((rvSt(x) === 'bad') ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
         '<button class="btn green mini" data-a="rok" data-id="' + x.id + '">✔</button><button class="btn red mini" data-a="rbad" data-id="' + x.id + '">🚩</button>' +
-        (S.data.bad[x.id] ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩</button>' : '') + '</span></div></div>';
+        ((rvSt(x) === 'bad') ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩</button>' : '') + '</span></div></div>';
       return;
     }
     h += '<div class="panel rv"><div>' + escHtml(x.q).replace(/\n/g, '<br>') + '</div><div style="margin:6px 0 6px 8px">' +
       x.c.map((c, i) => '<div' + (i === x.a ? ' style="font-weight:800;color:#1c7a36"' : '') + '>' + CHOICE_LABELS[i] + '. ' + escHtml(c) + (i === x.a ? ' ✅' : '') + '</div>').join('') + '</div>' +
       '<div style="font-size:15px">💡 ' + escHtml(x.e) + '</div><div class="row" style="margin-top:6px">' +
-      (S.data.ok[x.id] ? '<span class="chip">✅ ตรวจแล้ว</span>' : '') + (S.data.bad[x.id] ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
+      ((rvSt(x) === 'ok') ? '<span class="chip">✅ ตรวจแล้ว</span>' : '') + ((rvSt(x) === 'bad') ? '<span class="chip">🚩 ซ่อนอยู่</span>' : '') +
       '<button class="btn green mini" data-a="rok" data-id="' + x.id + '">✔ ถูกต้อง</button>' +
       '<button class="btn red mini" data-a="rbad" data-id="' + x.id + '">🚩 เฉลยผิด/กำกวม</button>' +
-      (S.data.bad[x.id] ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩ นำกลับ</button>' : '') + '</div></div>';
+      ((rvSt(x) === 'bad') ? '<button class="btn gray mini" data-a="rrestore" data-id="' + x.id + '">↩ นำกลับ</button>' : '') + '</div></div>';
   });
   return h + '</div>';
 }
@@ -2958,8 +3276,8 @@ function choosePlant(i) {
 // ---------- ตอบคำถาม ----------
 function startQuiz(opts, review) {
   const p = cur();
-  const qs = review ? [genQuestion(review, rng, S.data.bad)] : buildRound(p, Object.assign({ bad: S.data.bad }, opts), rng);
-  S.quiz = { qs, i: 0, results: [], phase: 'ask', input: '', paused: false, seeds: 0, coins: 0, review: review || null, opts: opts || {} };
+  const qs = review ? [genQuestion(review, rng, S.hide)] : buildRound(p, Object.assign({ bad: S.hide }, opts), rng);
+  S.quiz = { qs, i: 0, results: [], phase: 'ask', input: '', paused: false, seeds: 0, coins: 0, review: review || null, opts: opts || {}, t0: Date.now() };
   renderQuiz();
 }
 function renderQuiz() {
@@ -2978,7 +3296,7 @@ function renderQuiz() {
     return;
   }
   const q = Q.qs[Q.i];
-  const draft = q.itemId && !S.data.ok[q.itemId] ? '<span class="draft">ร่างโดย AI · รอผู้ปกครองตรวจ</span>' : '';
+  const draft = q.itemId && !isApproved(q.itemId) ? '<span class="draft">ร่างโดย AI · รอตรวจ</span>' : '';
   const last = Q.i + 1 >= Q.qs.length;
   const isMc = q.kind === 'mc';
   const body = q.prompt + (q.hint ? '<div class="hint">' + q.hint + '</div>' : '');
@@ -3024,6 +3342,7 @@ function submitAnswer() {
   const ok = checkAnswer(Q.input, q);
   if (Q.review) Q.coins += resolveReview(p, Q.review, q, ok, now).coins;
   else Q.seeds += recordAnswer(p, q, ok, now).seeds;
+  logAnswer(p, q, ok, now, tzMin(), (now - (Q.t0 || now)) / 1000);   // สถิติรายวันสำหรับผู้ปกครอง
   Q.results.push(ok);
   Q.phase = 'fb';
   save(); beep(ok); renderQuiz();
@@ -3039,7 +3358,7 @@ function quizKey(k) {
 }
 function nextQuestion() {
   const Q = S.quiz;
-  Q.i += 1; Q.phase = 'ask'; Q.input = '';
+  Q.i += 1; Q.phase = 'ask'; Q.input = ''; Q.t0 = Date.now();
   renderQuiz();
 }
 function exitQuiz() { S.quiz = null; closeModal(); renderQuiz(); S.tab = 'farm'; render(); }
@@ -3073,7 +3392,11 @@ document.addEventListener('click', e => {
     if (n && n.trim()) { pr.name = n.trim().slice(0, 16); save(); render(); }
   }
   else if (a === 'sound') { S.data.sound = !S.data.sound; save(); render(); }
-  else if (a === 'tab') { S.tab = id; render(); }
+  else if (a === 'tab') {
+    if (id !== 'parent') S.parentOk = false;                          // ออกจากแท็บผู้ปกครองแล้วล็อกอัตโนมัติ
+    S.tab = id; render();
+    if (id === 'admin' && CLOUD.admin) loadReports();
+  }
   else if (a === 'plot') {
     const st = plotState(p, +id, now);
     if (st === 'empty') choosePlant(+id);
@@ -3101,7 +3424,6 @@ document.addEventListener('click', e => {
   else if (a === 'lexit') { S.lesson = null; render(); }
   else if (a === 'lprev') { if (S.lesson && S.lesson.i > 0) { S.lesson.i--; render(); } }
   else if (a === 'lnext') lessonNext();
-  else if (a === 'lok') { if (S.data.lok[id]) delete S.data.lok[id]; else S.data.lok[id] = true; save(); render(); }
   else if (a === 'barn') showBarn();
   else if (a === 'weedlist') showWeeds();
   else if (a === 'tier') { S.tier = id; render(); }
@@ -3110,22 +3432,46 @@ document.addEventListener('click', e => {
   else if (a === 'choice') { S.quiz.input = id; S.quiz.picked = +id; submitAnswer(); }
   else if (a === 'flag') {
     const q = S.quiz.qs[S.quiz.i];
-    if (q && q.itemId) { S.data.bad[q.itemId] = true; delete S.data.ok[q.itemId]; save(); toast('ซ่อนข้อนี้แล้ว ผู้ปกครองตรวจซ้ำได้ที่หน้าตรวจเฉลย'); }
+    if (q && q.itemId) { S.data.bad[q.itemId] = true; rebuildHide(); save(); reportItem(q.itemId); toast('ซ่อนข้อนี้แล้ว และแจ้ง admin ให้ตรวจแล้ว'); }
   }
-  else if (a === 'review') { S.view = 'review'; render(); window.scrollTo(0, 0); }
-  else if (a === 'reviewback') { S.view = 'main'; S.tab = 'parent'; render(); }
+  else if (a === 'review') { if (CLOUD.admin) { S.view = 'review'; render(); window.scrollTo(0, 0); } }
+  else if (a === 'reviewback') { S.view = 'main'; S.tab = 'admin'; render(); }
   else if (a === 'rsubject') { S.reviewSubject = id; render(); }
   else if (a === 'rokall') {
     const ids = (VOCAB_BY_TOPIC[id] || []).map(vocabId).concat((SPELL_BY_TOPIC[id] || []).map(spellId));
-    const n = ids.filter(k => !S.data.bad[k] && !S.data.ok[k]).length;
-    if (n && confirm('ตรวจว่า "ถูกต้อง" ทั้งหมวดนี้ ' + n + ' คำ (คำที่ซ่อนอยู่ไม่ถูกแตะ) ยืนยันไหม?')) {
-      ids.forEach(k => { if (!S.data.bad[k]) S.data.ok[k] = true; });
-      save(); render();
-    }
+    const idx = getItemIndex(), todo = ids.filter(k => idx[k] && reviewStatus(REV, k, idx[k].sig) === 'todo');
+    if (todo.length && confirm('ตรวจว่า "ถูกต้อง" ทั้งหมวดนี้ ' + todo.length + ' คำ (คำที่ตัดสินไปแล้วไม่ถูกแตะ) ยืนยันไหม?')) adminSet(todo, 'ok');
   }
-  else if (a === 'rok') { S.data.ok[id] = true; delete S.data.bad[id]; save(); render(); }
-  else if (a === 'rbad') { S.data.bad[id] = true; delete S.data.ok[id]; save(); render(); }
-  else if (a === 'rrestore') { delete S.data.bad[id]; save(); render(); }
+  else if (a === 'rok') adminSet([id], 'ok');
+  else if (a === 'rbad') adminSet([id], 'bad');
+  else if (a === 'rrestore') adminSet([id], 'todo');
+  else if (a === 'adminrefresh') { toast('กำลังโหลดผลตรวจล่าสุด…'); ensureToken().then(tok => cloudAux(tok)).then(() => { render(); toast('โหลดแล้ว'); }); }
+  else if (a === 'repok') adminSet([id], 'ok').then(() => deleteReports(id)).then(() => render());
+  else if (a === 'repbad') adminSet([id], 'bad').then(() => deleteReports(id)).then(() => render());
+  else if (a === 'repdel') deleteReports(id).then(() => render());
+  else if (a === 'pinkey') pinKey(id);
+  else if (a === 'plock') { S.parentOk = false; S.pin = { buf: '', first: null, fails: 0, until: 0 }; render(); }
+  else if (a === 'plevel') { S.pLevel = id; render(); }
+  else if (a === 'pinchange') {
+    if (confirm('เปลี่ยนรหัสผู้ปกครอง? จะให้ตั้งรหัสใหม่ทันที')) { delete S.data.pin; S.pin = { buf: '', first: null, fails: 0, until: 0 }; S.parentOk = false; save(); render(); }
+  }
+  else if (a === 'pinforgot') {
+    openModal('<h3>ลืมรหัสผู้ปกครอง</h3><p class="note">ใส่รหัสผ่านที่ใช้ล็อกอินบัญชี ' + esc(CLOUD.session ? CLOUD.session.email : '') + ' เพื่อยืนยันว่าเป็นเจ้าของบัญชี แล้วตั้งรหัสผู้ปกครองใหม่</p>' +
+      '<input id="pw_reset" type="password" autocomplete="current-password" placeholder="รหัสผ่านของบัญชี" style="width:100%;font:inherit;padding:10px;margin:6px 0"><div class="amsg" id="pw_msg"></div>' +
+      '<button class="btn green big" data-a="pinreset">ยืนยันและตั้งรหัสใหม่</button><button class="btn gray" data-a="closemodal">ยกเลิก</button>');
+  }
+  else if (a === 'pinreset') pinReset();
+  else if (a === 'examset') {
+    openModal('<h3>🎯 วันสอบ</h3><p class="note">ตั้งวันสอบเพื่อให้หน้าผู้ปกครองนับถอยหลัง (ใช้ร่วมทุกเครื่อง)</p>' +
+      '<input id="exam_in" type="date" value="' + esc(S.data.exam || '') + '" style="width:100%;font:inherit;padding:10px;margin:6px 0">' +
+      '<button class="btn green big" data-a="examsave">บันทึก</button><button class="btn gray" data-a="examclear">ล้างวันสอบ</button><button class="btn gray" data-a="closemodal">ปิด</button>');
+  }
+  else if (a === 'examsave') {
+    const v = ($('exam_in') || {}).value || '';
+    if (parseIsoDay(v) === null) { toast('เลือกวันที่ให้ถูกต้องก่อน'); return; }
+    S.data.exam = v; closeModal(); save(); render();
+  }
+  else if (a === 'examclear') { delete S.data.exam; closeModal(); save(); render(); }
   else if (a === 'weed') startQuiz(null, id);
   else if (a === 'key') quizKey(id);
   else if (a === 'submit') submitAnswer();
@@ -3142,7 +3488,19 @@ document.addEventListener('click', e => {
     }
   }
 });
+// ลืมรหัสผู้ปกครอง: ยืนยันด้วยรหัสผ่านบัญชี (ถามเซิร์ฟเวอร์) แล้วล้างรหัสเดิมให้ตั้งใหม่
+async function pinReset() {
+  const pw = ($('pw_reset') || {}).value || '', say = t => { const m = $('pw_msg'); if (m) m.textContent = t; };
+  if (!pw) return say('กรอกรหัสผ่านของบัญชีก่อน');
+  say('กำลังตรวจสอบ…');
+  const r = await sbFetch('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: CLOUD.session.email, password: pw } });
+  if (!r.ok) return say(authErrText(r));
+  delete S.data.pin; S.pin = { buf: '', first: null, fails: 0, until: 0 }; S.parentOk = false;
+  closeModal(); save(); render(); toast('ล้างรหัสเดิมแล้ว ตั้งรหัสใหม่ได้เลย');
+}
 document.addEventListener('change', e => {
+  const tp = e.target.closest('[data-a="rtopic"]');
+  if (tp) { S.reviewTopic[S.reviewSubject || 'sci'] = tp.value; render(); }
   const el = e.target.closest('[data-a="stretch"]');
   if (el) { cur().stretch = parseFloat(el.value); save(); toast('บันทึกแล้ว'); }
   const rt = e.target.closest('[data-a="rtodo"]');
@@ -3180,6 +3538,7 @@ function boot() {
   const ses = loadSession(), mode = lsGet(MODE_KEY);
   if (ses && mode === 'cloud') {
     CLOUD.session = ses; S.mode = 'cloud'; CLOUD.synced = loadSynced();
+    try { REV = JSON.parse(lsGet(REV_KEY)) || {}; } catch (e) { REV = {}; }
     initData(); startView(); setCloud('sending'); render();
     cloudRun({ first: true });
   } else { S.data = newData(); normalizeData(); S.view = 'login'; render(); }
